@@ -106,28 +106,31 @@ void Show(object_t* object, int moveY, int moveX)
 	wattron(object->win->window, COLOR_PAIR(object->colour));
 
 	// movements:
-	if ((moveY != 0)/* && (object->y + object->height < LINES - BORDER)*/)
+	if ((moveY > 0) && (object->y + object->height < LINES - BORDER))
 	{
 		object->y += moveY;
 		for (int i = 1; i <= moveY; i++) // working 50-50 (to be checked)
-		{
-			if (moveY > 0)
-				mvwprintw(object->win->window, object->y - i, object->x, "%s", sw);
-			if (moveY < 0)
-				mvwprintw(object->win->window, object->y + object->height + (i - 1), object->x, "%s", sw);
-		}
+			mvwprintw(object->win->window, object->y - i, object->x, "%s", sw);
 	}
-	if ((moveX != 0) && (object->x + object->width < COLS - BORDER))
+	if ((moveY < 0) && (object->y > BORDER))
+	{
+		object->y += moveY;
+		for (int i = 1; i <= moveY; i++)
+			mvwprintw(object->win->window, object->y + object->height + (i - 1), object->x, "%s", sw);
+	}
+	if ((moveX > 0) && (object->x + object->width < COLS - BORDER))
 	{
 		object->x += moveX;
 		for (int i = 1; i <= moveX; i++)
 			for (int j = 0; j < object->height; j++)
-			{
-				if (moveX > 0)
-					mvwprintw(object->win->window, object->y + j, object->x - i, " ");
-				else
-					mvwprintw(object->win->window, object->y + j, object->x + object->width, " "); // not working for some reason
-			}
+				mvwprintw(object->win->window, object->y + j, object->x - i, " ");
+	}
+	if ((moveX < 0) && (object->x > BORDER))
+	{
+		object->x += moveX;
+		for (int i = 1; i <= moveX; i++)
+			for (int j = 0; j < object->height; j++)
+				mvwprintw(object->win->window, object->y + j, object->x + object->width, " "); // not working for some reason
 	}
 
 	Print(object);
