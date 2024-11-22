@@ -100,8 +100,9 @@ void Print(object_t* object)
 
 void Show(object_t* object, int moveY, int moveX)
 {
-	char* sw = (char*)malloc(sizeof(char) * object->width);
+	char* sw = (char*)malloc((object->width + 1) * sizeof(char));
 	memset(sw, ' ', object->width);
+	sw[object->width] = '\0';
 
 	wattron(object->win->window, COLOR_PAIR(object->colour));
 
@@ -109,14 +110,14 @@ void Show(object_t* object, int moveY, int moveX)
 	if ((moveY > 0) && (object->y + object->height < LINES - BORDER))
 	{
 		object->y += moveY;
-		for (int i = 1; i <= moveY; i++) // working 50-50 (to be checked)
+		for (int i = 1; i <= moveY; i++)
 			mvwprintw(object->win->window, object->y - i, object->x, "%s", sw);
 	}
 	if ((moveY < 0) && (object->y > BORDER))
 	{
 		object->y += moveY;
-		for (int i = 1; i <= moveY; i++)
-			mvwprintw(object->win->window, object->y + object->height + (i - 1), object->x, "%s", sw);
+		for (int i = 1; i <= abs(moveY); i++)
+			mvwprintw(object->win->window, object->y + object->height, object->x, "%s", sw);
 	}
 	if ((moveX > 0) && (object->x + object->width < COLS - BORDER))
 	{
@@ -128,9 +129,9 @@ void Show(object_t* object, int moveY, int moveX)
 	if ((moveX < 0) && (object->x > BORDER))
 	{
 		object->x += moveX;
-		for (int i = 1; i <= moveX; i++)
+		for (int i = 1; i <= abs(moveX); i++)
 			for (int j = 0; j < object->height; j++)
-				mvwprintw(object->win->window, object->y + j, object->x + object->width, " "); // not working for some reason
+				mvwprintw(object->win->window, object->y + j, object->x + object->width + (i - 1), " "); // not working for some reason
 	}
 
 	Print(object);
@@ -151,7 +152,7 @@ object_t* InitFrog(window_t* w, int col)
 	object->appearance = (char**)malloc(sizeof(char*));
 	object->appearance[0] = (char*)malloc(sizeof(char));
 
-	object->appearance[0][0] = 'Q';
+	strcpy(object->appearance[0], "Q");
 
 	return object;
 }
