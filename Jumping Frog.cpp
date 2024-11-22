@@ -131,7 +131,7 @@ void Show(object_t* object, int moveY, int moveX)
 		object->x += moveX;
 		for (int i = 1; i <= abs(moveX); i++)
 			for (int j = 0; j < object->height; j++)
-				mvwprintw(object->win->window, object->y + j, object->x + object->width + (i - 1), " "); // not working for some reason
+				mvwprintw(object->win->window, object->y + j, object->x + object->width + (i - 1), " ");
 	}
 
 	Print(object);
