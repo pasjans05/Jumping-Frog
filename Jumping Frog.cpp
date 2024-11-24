@@ -112,12 +112,12 @@ window_t* Init(WINDOW* parent, int lines, int cols, int y, int x, int colour, in
 
 int CheckRoad(int y, int x)
 {
-	// Get the character and its attributes from the standard screen at (y, x) 
 	chtype ch = mvinch(y, x);
-	// Extract the color pair from the attributes 
-	int color_pair = PAIR_NUMBER(ch & A_COLOR);
-	// Return 1 if color pair is 1 (COLOR_WHITE on COLOR_BLACK), otherwise return 0 
-	if (color_pair == ROAD_COLOR)
+	int color_pair = PAIR_NUMBER(ch & A_COLOR); // extract color pair from ch
+
+	short foregrnd, bckgrnd;
+	pair_content(color_pair, &foregrnd, &bckgrnd); // extract foreground and background color from color_pair
+	if (bckgrnd == COLOR_BLACK)
 		return 1;
 	return 0;
 }
@@ -156,7 +156,8 @@ void Show(object_t* object, int moveY, int moveX)
 	memset(sw, ' ', object->width);
 	sw[object->width] = '\0';
 
-	CheckRoad(object->y + moveY, object->x + moveX) ? wattron(object->win->window, COLOR_PAIR(object->rd_colour)) : wattron(object->win->window, COLOR_PAIR(object->bckg_colour));
+	// check whether to change background print colour based on current object position for blank space printing
+	// CheckRoad(object->y, object->x) ? wattron(object->win->window, COLOR_PAIR(object->rd_colour)) : wattron(object->win->window, COLOR_PAIR(object->bckg_colour));
 
 	// movements:
 	if ((moveY > 0) && (object->y + object->height < LINES - BORDER))
@@ -185,6 +186,9 @@ void Show(object_t* object, int moveY, int moveX)
 			for (int j = 0; j < object->height; j++)
 				mvwprintw(object->win->window, object->y + j, object->x + object->width + (i - 1), " ");
 	}
+
+	// check whether to change background print colour based on where object is abour to move
+	CheckRoad(object->y, object->x) ? wattron(object->win->window, COLOR_PAIR(object->rd_colour)) : wattron(object->win->window, COLOR_PAIR(object->bckg_colour));
 
 	Print(object);
 
@@ -291,7 +295,7 @@ int main()
 
 	// roads initialisation, TODO: random road width
 	for (int i = 0; i < n_of_roads; i++)
-		roads[i] = InitRoad(playwin, 3, SINGLE_LANE);
+		roads[i] = InitRoad(playwin, 17, SINGLE_LANE);
 
 	for (int i = 0; i < sizeof(roads) / sizeof(roads[0]); i++)
 		PrintRoad(roads[i]);
