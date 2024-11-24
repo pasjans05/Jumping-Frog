@@ -9,6 +9,7 @@
 #define LINES 25
 #define COLS 110
 #define BORDER 1
+#define FINISH 1
 
 // colours:
 #define MAIN_COLOR 1
@@ -103,7 +104,15 @@ void CleanWin(window_t* W)
 			else mvwaddch(W->window, i, j, ' ');
 		}
 	}
+	// name and index number:
 	mvwprintw(W->window, LINES - 1, BORDER + 1, "Stanislaw Kardas 203880");
+
+	// finish line:
+	wattron(W->window, COLOR_PAIR(COLOR_GREEN, BACKGROUND_COLOR));
+	char* fin_line = (char*)malloc((COLS - 2 * BORDER + 1) * sizeof(char));
+	memset(fin_line, '/', COLS - 2 * BORDER);
+	fin_line[COLS - 2 * BORDER] = '\0';
+	mvwprintw(W->window, BORDER, BORDER, "%s", fin_line);
 }
 
 // window initialization: position, colors, border, etc
@@ -299,7 +308,7 @@ timer_t* InitTimer(window_t* status)
 	return timer;
 }
 
-void UpdateTimer(timer_t* T, window_t* status)							// return 1: time is over; otherwise: 0
+void UpdateTimer(timer_t* T, window_t* status)
 {
 	T->frame_no++;
 	Sleep(T->frame_time);
@@ -315,7 +324,11 @@ int MainLoop(window_t* status, object_t* frog, timer_t* timer)
 	while ((ch = wgetch(status->window)) != QUIT) // NON-BLOCKING! (nodelay=TRUE)
 	{
 		if (ch == ERR) ch = NOKEY; // ERR is ncurses predefined
-		else MoveFrog(frog, ch);
+		else 
+		{
+			MoveFrog(frog, ch);
+			if (frog->y == FINISH) return 0; // TODO: win procedure
+		}
 		// TODO: movecar callout
 		flushinp(); // clear input buffer (avoiding multiple key pressed)
 		UpdateTimer(timer, status);// update timer & sleep
@@ -325,7 +338,7 @@ int MainLoop(window_t* status, object_t* frog, timer_t* timer)
 
 int main()
 {
-	int n_of_roads = 1;
+	int n_of_roads = 2;
 
 	WINDOW* mainwin = Start();
 
@@ -338,11 +351,10 @@ int main()
 	road_t** roads = (road_t**)malloc(n_of_roads * sizeof(road_t*));
 
 	// roads initialisation
-	// TODO: random road width & positions
-	for (int i = 0; i < n_of_roads; i++)
-		roads[i] = InitRoad(playwin, 17, SINGLE_LANE);
+	roads[0] = InitRoad(playwin, 17, SINGLE_LANE);
+	roads[1] = InitRoad(playwin, 5, DOUBLE_LANE);
 
-	for (int i = 0; i < sizeof(roads) / sizeof(roads[0]); i++)
+	for (int i = 0; i < n_of_roads; i++)
 		PrintRoad(roads[i]);
 
 	Show(frog, 0, 0);
