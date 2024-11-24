@@ -12,6 +12,8 @@
 // colours:
 #define MAIN_COLOR 1
 #define FROG_COLOR 2
+#define ROAD_COLOR 3
+#define FROG_ROAD_COLOR 4
 #define BACKGROUND_COLOR COLOR_WHITE
 
 // key definitions:
@@ -21,6 +23,11 @@
 // general definitions:
 #define DELAY_OFF	0
 #define DELAY_ON	1
+
+#define SINGLE_LANE 4
+#define DOUBLE_LANE 7
+#define TRIPLE_LANE 10
+
 
 // structures:
 typedef struct {
@@ -33,11 +40,21 @@ typedef struct {
 // moving object structure inside win(dow)
 typedef struct {
 	window_t* win;
-	int colour; // normal color
+	// in case of cars both bckg and rd colours are the same
+	int bckg_colour; // normal color (background color as defined)
+	int rd_colour; // background color is road color
 	int x, y;
 	int width, height; // sizes
 	char** appearance; // shape of the object (2-dim characters array (box))
 } object_t;
+
+typedef struct {
+	window_t* win;
+	int colour;
+	int y; // top row of the road
+	int width; // road spreads for this many rows down from and including y
+} road_t;
+
 
 WINDOW* Start()
 {
@@ -51,6 +68,8 @@ WINDOW* Start()
 	start_color(); // initialize colors
 	init_pair(MAIN_COLOR, COLOR_BLUE, BACKGROUND_COLOR);
 	init_pair(FROG_COLOR, COLOR_GREEN, BACKGROUND_COLOR);
+	init_pair(ROAD_COLOR, COLOR_WHITE, COLOR_BLACK);
+	init_pair(FROG_ROAD_COLOR, COLOR_GREEN, COLOR_BLACK);
 
 	noecho(); // Switch off echoing, turn off cursor
 	curs_set(0);
@@ -91,11 +110,44 @@ window_t* Init(WINDOW* parent, int lines, int cols, int y, int x, int colour, in
 	return W;
 }
 
+int CheckRoad(int y, int x)
+{
+	// Get the character and its attributes from the standard screen at (y, x) 
+	chtype ch = mvinch(y, x);
+	// Extract the color pair from the attributes 
+	int color_pair = PAIR_NUMBER(ch & A_COLOR);
+	// Return 1 if color pair is 1 (COLOR_WHITE on COLOR_BLACK), otherwise return 0 
+	if (color_pair == ROAD_COLOR)
+		return 1;
+	return 0;
+}
+
 // TODO: OBJ+ FUNCTIONS
 void Print(object_t* object)
 {
 	for (int i = 0; i < object->height; i++)
 		mvwprintw(object->win->window, object->y + i, object->x, "%s", object->appearance[i]);
+}
+
+void PrintRoad(road_t* road)
+{
+	wattron(road->win->window, COLOR_PAIR(road->colour));
+
+	// lines at the begining and end of road:
+	char* rdline = (char*)malloc((COLS - 2 * BORDER + 1) * sizeof(char)); // screen inside the borders + 1 for escape character \0
+	memset(rdline, '-', COLS - 2 * BORDER);
+	rdline[COLS - 2 * BORDER] = '\0'; // avoiding junk characters
+	// empty road:
+	char* rdempty = (char*)malloc((COLS - 2 * BORDER + 1) * sizeof(char));
+	memset(rdempty, ' ', COLS - 2 * BORDER);
+	rdempty[COLS - 2 * BORDER] = '\0';
+
+	for (int i = 0; i < road->width; i++)
+	{
+		if (i % 3 == 0) mvwprintw(road->win->window, road->y + i, BORDER, "%s", rdline); // every lane is 2 lines wide, bounded by rdline
+		else mvwprintw(road->win->window, road->y + i, BORDER, "%s", rdempty);
+	}
+	wrefresh(road->win->window);
 }
 
 void Show(object_t* object, int moveY, int moveX)
@@ -104,7 +156,7 @@ void Show(object_t* object, int moveY, int moveX)
 	memset(sw, ' ', object->width);
 	sw[object->width] = '\0';
 
-	wattron(object->win->window, COLOR_PAIR(object->colour));
+	CheckRoad(object->y + moveY, object->x + moveX) ? wattron(object->win->window, COLOR_PAIR(object->rd_colour)) : wattron(object->win->window, COLOR_PAIR(object->bckg_colour));
 
 	// movements:
 	if ((moveY > 0) && (object->y + object->height < LINES - BORDER))
@@ -139,10 +191,11 @@ void Show(object_t* object, int moveY, int moveX)
 	wrefresh(object->win->window);
 }
 
-object_t* InitFrog(window_t* w, int col)
+object_t* InitFrog(window_t* w, int col, int roadcol)
 {
 	object_t* object = (object_t*)malloc(sizeof(object_t));
-	object->colour = col;
+	object->bckg_colour = col;
+	object->rd_colour = roadcol;
 	object->win = w;
 	object->width = 1;
 	object->height = 1;
@@ -160,7 +213,8 @@ object_t* InitFrog(window_t* w, int col)
 object_t* InitCar(window_t* w, int col, int posY, int posX)
 {
 	object_t* object = (object_t*)malloc(sizeof(object_t));
-	object->colour = col;
+	object->bckg_colour = col;
+	object->rd_colour = col;
 	object->win = w;
 	object->width = 3;
 	object->height = 2;
@@ -175,6 +229,16 @@ object_t* InitCar(window_t* w, int col, int posY, int posX)
 	strcpy(object->appearance[1], "###");
 
 	return object;
+}
+
+road_t* InitRoad(window_t* w, int posY, int lanes)
+{
+	road_t* road = (road_t*)malloc(sizeof(road_t));
+	road->colour = ROAD_COLOR;
+	road->win = w;
+	road->y = posY;
+	road->width = lanes;
+	return road;
 }
 
 void MoveFrog(object_t* object, int ch)
@@ -214,11 +278,23 @@ int MainLoop(window_t* status, object_t* frog)
 
 int main()
 {
+	int n_of_roads = 1;
+
 	WINDOW* mainwin = Start();
 
 	window_t* playwin = Init(mainwin, LINES, COLS, 0, 0, MAIN_COLOR, DELAY_ON);
 
-	object_t* frog = InitFrog(playwin, FROG_COLOR);
+	object_t* frog = InitFrog(playwin, FROG_COLOR, FROG_ROAD_COLOR);
+
+	road_t** roads = (road_t**)malloc(n_of_roads * sizeof(road_t*));
+
+
+	// roads initialisation, TODO: random road width
+	for (int i = 0; i < n_of_roads; i++)
+		roads[i] = InitRoad(playwin, 3, SINGLE_LANE);
+
+	for (int i = 0; i < sizeof(roads) / sizeof(roads[0]); i++)
+		PrintRoad(roads[i]);
 
 	Show(frog, 0, 0);
 
