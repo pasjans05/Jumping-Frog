@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
 
 // window size
 #define LINES 25
@@ -19,6 +20,9 @@
 // key definitions:
 #define QUIT		'q'
 #define NOKEY		' '
+
+//time related definitions:
+#define FRAME_TIME	25 // 25 ms (base frame time) (time interval between frames)
 
 // general definitions:
 #define DELAY_OFF	0
@@ -55,6 +59,10 @@ typedef struct {
 	int width; // road spreads for this many rows down from and including y
 } road_t;
 
+typedef struct {
+	unsigned int frame_time;
+	int frame_no;
+} timer_t;
 
 WINDOW* Start()
 {
@@ -95,6 +103,7 @@ void CleanWin(window_t* W)
 			else mvwaddch(W->window, i, j, ' ');
 		}
 	}
+	mvwprintw(W->window, LINES - 1, BORDER + 1, "Stanislaw Kardas 203880");
 }
 
 // window initialization: position, colors, border, etc
@@ -122,7 +131,17 @@ int CheckRoad(int y, int x)
 	return 0;
 }
 
-// TODO: OBJ+ FUNCTIONS
+// ---------------------------status functions:---------------------------
+
+void ShowTimer(window_t* W, float pass_time)
+{
+	wattron(W->window, COLOR_PAIR(MAIN_COLOR));
+	mvwprintw(W->window, 0, BORDER + 1, "%.2f", pass_time / 1000);
+	wrefresh(W->window);
+}
+
+// ---------------------------OBJ+ FUNCTIONS:---------------------------
+
 void Print(object_t* object)
 {
 	for (int i = 0; i < object->height; i++)
@@ -157,7 +176,7 @@ void Show(object_t* object, int moveY, int moveX)
 	sw[object->width] = '\0';
 
 	// check whether to change background print colour based on current object position for blank space printing
-	// CheckRoad(object->y, object->x) ? wattron(object->win->window, COLOR_PAIR(object->rd_colour)) : wattron(object->win->window, COLOR_PAIR(object->bckg_colour));
+	CheckRoad(object->y, object->x) ? wattron(object->win->window, COLOR_PAIR(object->rd_colour)) : wattron(object->win->window, COLOR_PAIR(object->bckg_colour));
 
 	// movements:
 	if ((moveY > 0) && (object->y + object->height < LINES - BORDER))
@@ -263,9 +282,33 @@ void MoveFrog(object_t* object, int ch)
 
 // TODO: collision
 
-// TODO: timer functions
+// ---------------------------timer functions:---------------------------
 
-int MainLoop(window_t* status, object_t* frog)
+void Sleep(unsigned int tui) 
+{
+	clock_t start_time = clock();
+	clock_t end_time = start_time + (clock_t)(tui * CLOCKS_PER_SEC / 1000);
+	while (clock() < end_time) { /* busy loop */ }
+}
+
+timer_t* InitTimer(window_t* status)
+{
+	timer_t* timer = (timer_t*)malloc(sizeof(timer_t));
+	timer->frame_no = 1;
+	timer->frame_time = FRAME_TIME;
+	return timer;
+}
+
+void UpdateTimer(timer_t* T, window_t* status)							// return 1: time is over; otherwise: 0
+{
+	T->frame_no++;
+	Sleep(T->frame_time);
+	ShowTimer(status, T->frame_time*T->frame_no);
+}
+
+// ---------------------------main loop:---------------------------
+
+int MainLoop(window_t* status, object_t* frog, timer_t* timer)
 {
 	int ch;
 	int pts = 0;
@@ -275,7 +318,7 @@ int MainLoop(window_t* status, object_t* frog)
 		else MoveFrog(frog, ch);
 		// TODO: movecar callout
 		flushinp(); // clear input buffer (avoiding multiple key pressed)
-		// TODO: update timer & sleep
+		UpdateTimer(timer, status);// update timer & sleep
 	}
 	return 0;
 }
@@ -286,14 +329,16 @@ int main()
 
 	WINDOW* mainwin = Start();
 
-	window_t* playwin = Init(mainwin, LINES, COLS, 0, 0, MAIN_COLOR, DELAY_ON);
+	window_t* playwin = Init(mainwin, LINES, COLS, 0, 0, MAIN_COLOR, DELAY_OFF);
+
+	timer_t* timer = InitTimer(playwin);
 
 	object_t* frog = InitFrog(playwin, FROG_COLOR, FROG_ROAD_COLOR);
 
 	road_t** roads = (road_t**)malloc(n_of_roads * sizeof(road_t*));
 
-
-	// roads initialisation, TODO: random road width
+	// roads initialisation
+	// TODO: random road width & positions
 	for (int i = 0; i < n_of_roads; i++)
 		roads[i] = InitRoad(playwin, 17, SINGLE_LANE);
 
@@ -302,7 +347,7 @@ int main()
 
 	Show(frog, 0, 0);
 
-	if (MainLoop(playwin, frog) == 0)
+	if (MainLoop(playwin, frog, timer) == 0)
 	{
 		delwin(playwin->window);
 		delwin(mainwin);
