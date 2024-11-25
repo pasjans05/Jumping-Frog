@@ -16,6 +16,8 @@
 #define FROG_COLOR 2
 #define ROAD_COLOR 3
 #define FROG_ROAD_COLOR 4
+#define CAR_COLOR1 5 // colour pair for enemy car
+#define CAR_COLOR2 6 // unused for now, colour pair for friendly car
 #define BACKGROUND_COLOR COLOR_WHITE
 
 // key definitions:
@@ -24,6 +26,7 @@
 
 //time related definitions:
 #define FRAME_TIME	25 // 25 ms (base frame time) (time interval between frames)
+#define FROG_JUMP_TIME 25
 
 // general definitions:
 #define DELAY_OFF	0
@@ -33,6 +36,7 @@
 #define DOUBLE_LANE 7
 #define TRIPLE_LANE 10
 
+const int numof_cars = 5;
 
 // structures:
 typedef struct {
@@ -49,6 +53,8 @@ typedef struct {
 	int bckg_colour; // normal color (background color as defined)
 	int rd_colour; // background color is road color
 	int x, y;
+	int speed;
+	int interval;
 	int width, height; // sizes
 	char** appearance; // shape of the object (2-dim characters array (box))
 } object_t;
@@ -58,6 +64,8 @@ typedef struct {
 	int colour;
 	int y; // top row of the road
 	int width; // road spreads for this many rows down from and including y
+	int numof_cars;
+	object_t** cars;
 } road_t;
 
 typedef struct {
@@ -79,6 +87,7 @@ WINDOW* Start()
 	init_pair(FROG_COLOR, COLOR_GREEN, BACKGROUND_COLOR);
 	init_pair(ROAD_COLOR, COLOR_WHITE, COLOR_BLACK);
 	init_pair(FROG_ROAD_COLOR, COLOR_GREEN, COLOR_BLACK);
+	init_pair(CAR_COLOR1, COLOR_RED, COLOR_BLACK);
 
 	noecho(); // Switch off echoing, turn off cursor
 	curs_set(0);
@@ -233,6 +242,8 @@ object_t* InitFrog(window_t* w, int col, int roadcol)
 	object->height = 1;
 	object->y = LINES - (BORDER + 1);
 	object->x = COLS / 2;
+	object->speed = 1;
+	object->interval = 0;
 
 	object->appearance = (char**)malloc(sizeof(char*));
 	object->appearance[0] = (char*)malloc(sizeof(char));
@@ -242,7 +253,7 @@ object_t* InitFrog(window_t* w, int col, int roadcol)
 	return object;
 }
 
-object_t* InitCar(window_t* w, int col, int posY, int posX)
+object_t* InitCar(window_t* w, int col, int posY, int posX, int speed)
 {
 	object_t* object = (object_t*)malloc(sizeof(object_t));
 	object->bckg_colour = col;
@@ -252,38 +263,60 @@ object_t* InitCar(window_t* w, int col, int posY, int posX)
 	object->height = 2;
 	object->y = posY;
 	object->x = posX;
+	object->speed = (speed % object->width) + 1;
+	object->interval = 1;
 
 	object->appearance = (char**)malloc(sizeof(char*) * object->height); // 2D table of char(acter)s
 	for (int i = 0; i < object->height; i++)
 		object->appearance[i] = (char*)malloc(sizeof(char) * (object->width + 1)); // +1: end-of-string (C): '\0'
 	
-	strcpy(object->appearance[0], "###");
-	strcpy(object->appearance[1], "###");
+	strcpy(object->appearance[0], "###\0");
+	strcpy(object->appearance[1], "###\0");
 
 	return object;
 }
 
-road_t* InitRoad(window_t* w, int posY, int lanes)
+road_t* InitRoad(window_t* w, int posY, int lanes, int numof_cars)
 {
 	road_t* road = (road_t*)malloc(sizeof(road_t));
 	road->colour = ROAD_COLOR;
 	road->win = w;
 	road->y = posY;
 	road->width = lanes;
+	road->numof_cars = numof_cars;
+	road->cars = (object_t**)malloc(road->numof_cars * sizeof(object_t*));
+	srand(time(NULL));
+	for (int i = 0; i < road->numof_cars; i++)
+	{
+		road->cars[i] = InitCar(w, CAR_COLOR1, road->y + (rand() % (lanes % 3) * 3) - 2 + 3, rand() % (COLS - BORDER) + BORDER, rand());
+	}
 	return road;
 }
 
-void MoveFrog(object_t* object, int ch)
+void MoveFrog(object_t* object, int ch, unsigned int frame)
 {
-	switch (ch) {
-	//case KEY_UP: Show(object, -1, 0); break;
-	//case KEY_DOWN: Show(object, 1, 0); break;
-	//case KEY_LEFT: Show(object, 0, -1); break;
-	//case KEY_RIGHT: Show(object, 0, 1);
-	case 'w': Show(object, -1, 0); break;
-	case 's': Show(object, 1, 0); break;
-	case 'a': Show(object, 0, -1); break;
-	case 'd': Show(object, 0, 1); break;
+	if (frame - object->interval >= FROG_JUMP_TIME)
+	{
+		switch (ch) {
+			//case KEY_UP: Show(object, -1, 0); break;
+			//case KEY_DOWN: Show(object, 1, 0); break;
+			//case KEY_LEFT: Show(object, 0, -1); break;
+			//case KEY_RIGHT: Show(object, 0, 1);
+		case 'w': Show(object, -1, 0); break;
+		case 's': Show(object, 1, 0); break;
+		case 'a': Show(object, 0, -1); break;
+		case 'd': Show(object, 0, 1); break;
+		}
+		object->interval = frame;
+	}
+}
+
+void MoveCar(object_t* object, unsigned int frame)
+{
+	if (frame - object->interval >= FRAME_TIME)
+	{
+		Show(object, 0, object->speed);
+		object->interval = frame;
 	}
 }
 
@@ -317,7 +350,7 @@ void UpdateTimer(timer_t* T, window_t* status)
 
 // ---------------------------main loop:---------------------------
 
-int MainLoop(window_t* status, object_t* frog, timer_t* timer)
+int MainLoop(window_t* status, object_t* frog, timer_t* timer, road_t** roads, int numof_roads)
 {
 	int ch;
 	int pts = 0;
@@ -326,10 +359,14 @@ int MainLoop(window_t* status, object_t* frog, timer_t* timer)
 		if (ch == ERR) ch = NOKEY; // ERR is ncurses predefined
 		else 
 		{
-			MoveFrog(frog, ch);
+			MoveFrog(frog, ch, timer->frame_no);
 			if (frog->y == FINISH) return 0; // TODO: win procedure
+			
 		}
-		// TODO: movecar callout
+		// movecar callout
+		for (int i = 0; i < numof_roads; i++)
+			for (int j = 0; j < roads[i]->numof_cars; j++)
+				MoveCar(roads[i]->cars[j], timer->frame_no);
 		flushinp(); // clear input buffer (avoiding multiple key pressed)
 		UpdateTimer(timer, status);// update timer & sleep
 	}
@@ -338,7 +375,7 @@ int MainLoop(window_t* status, object_t* frog, timer_t* timer)
 
 int main()
 {
-	int n_of_roads = 2;
+	int numof_roads = 2;
 
 	WINDOW* mainwin = Start();
 
@@ -348,18 +385,17 @@ int main()
 
 	object_t* frog = InitFrog(playwin, FROG_COLOR, FROG_ROAD_COLOR);
 
-	road_t** roads = (road_t**)malloc(n_of_roads * sizeof(road_t*));
+	road_t** roads = (road_t**)malloc(numof_roads * sizeof(road_t*));
 
-	// roads initialisation
-	roads[0] = InitRoad(playwin, 17, SINGLE_LANE);
-	roads[1] = InitRoad(playwin, 5, DOUBLE_LANE);
+	roads[0] = InitRoad(playwin, 17, SINGLE_LANE, 2);
+	roads[1] = InitRoad(playwin, 5, DOUBLE_LANE, 4);
 
-	for (int i = 0; i < n_of_roads; i++)
+	for (int i = 0; i < numof_roads; i++)
 		PrintRoad(roads[i]);
 
 	Show(frog, 0, 0);
 
-	if (MainLoop(playwin, frog, timer) == 0)
+	if (MainLoop(playwin, frog, timer, roads, numof_roads) == 0)
 	{
 		delwin(playwin->window);
 		delwin(mainwin);
