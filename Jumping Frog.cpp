@@ -328,9 +328,14 @@ void MoveCar(object_t* object, unsigned int frame)
 	}
 }
 
-// TODO: cars movements (speed related)
-
-// TODO: collision
+// collision of two boxes
+int Collision(object_t* f, object_t* c)
+{
+	if (((f->y >= c->y && f->y < c->y + f->height) || (c->y >= f->y && c->y < f->y + f->height)) &&
+		((f->x >= c->x && f->x < c->x + f->width) || (c->x >= f->x && c->x < f->x + f->width)))
+		return 1;
+	else 	return 0;
+}
 
 // ---------------------------timer functions:---------------------------
 
@@ -371,10 +376,15 @@ int MainLoop(window_t* status, object_t* frog, timer_t* timer, road_t** roads, i
 			if (frog->y == FINISH) return 0; // TODO: win procedure
 			
 		}
-		// movecar callout
+		// movecar callout with collision checker (PARTIALLY WORKING)
 		for (int i = 0; i < numof_roads; i++)
+		{
 			for (int j = 0; j < roads[i]->numof_cars; j++)
+			{
 				MoveCar(roads[i]->cars[j], timer->frame_no);
+				if (Collision(frog, roads[i]->cars[j])) return 0; // TODO: lose procedure
+			}
+		}
 		flushinp(); // clear input buffer (avoiding multiple key pressed)
 		UpdateTimer(timer, status);// update timer & sleep
 	}
