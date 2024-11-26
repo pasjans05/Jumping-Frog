@@ -32,9 +32,9 @@
 #define DELAY_OFF	0
 #define DELAY_ON	1
 
-#define SINGLE_LANE 4
-#define DOUBLE_LANE 7
-#define TRIPLE_LANE 10
+#define SINGLE_LANE 1 // 4 rows wide
+#define DOUBLE_LANE 2 // 7 rows wide
+#define TRIPLE_LANE 3 // 10 rows wide
 
 #define RA(min, max) ( (min) + rand() % ((max) - (min) + 1) )			// random number between min and max (inc)
 
@@ -66,6 +66,7 @@ typedef struct {
 	int colour;
 	int y; // top row of the road
 	int width; // road spreads for this many rows down from and including y
+	int speed; // speed of all cars using this road
 	int numof_cars;
 	object_t** cars;
 } road_t;
@@ -284,12 +285,13 @@ road_t* InitRoad(window_t* w, int posY, int lanes, int numof_cars)
 	road->colour = ROAD_COLOR;
 	road->win = w;
 	road->y = posY;
-	road->width = lanes;
+	road->width = lanes*3 + 1;
+	road->speed = RA(FRAME_TIME / 4, FRAME_TIME);
 	road->numof_cars = numof_cars;
 	road->cars = (object_t**)malloc(road->numof_cars * sizeof(object_t*));
 	for (int i = 0; i < road->numof_cars; i++)
 	{
-		road->cars[i] = InitCar(w, CAR_COLOR1, road->y + (RA(0, 2)*3 - 2), RA(BORDER + 1, COLS - BORDER - 3), RA(FRAME_TIME/4, FRAME_TIME));
+		road->cars[i] = InitCar(w, CAR_COLOR1, road->y + (RA(0, lanes - 1)*3 + 1), RA(BORDER + 1, COLS - BORDER - 3), road->speed);
 	}
 	return road;
 }
