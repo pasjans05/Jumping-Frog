@@ -36,6 +36,8 @@
 #define DOUBLE_LANE 7
 #define TRIPLE_LANE 10
 
+#define RA(min, max) ( (min) + rand() % ((max) - (min) + 1) )			// random number between min and max (inc)
+
 const int numof_cars = 5;
 
 // structures:
@@ -53,7 +55,7 @@ typedef struct {
 	int bckg_colour; // normal color (background color as defined)
 	int rd_colour; // background color is road color
 	int x, y;
-	int speed;
+	int speed; // speed per frame (how many frames betweeen moves)
 	int interval;
 	int width, height; // sizes
 	char** appearance; // shape of the object (2-dim characters array (box))
@@ -242,7 +244,7 @@ object_t* InitFrog(window_t* w, int col, int roadcol)
 	object->height = 1;
 	object->y = LINES - (BORDER + 1);
 	object->x = COLS / 2;
-	object->speed = 1;
+	object->speed = FROG_JUMP_TIME;
 	object->interval = 0;
 
 	object->appearance = (char**)malloc(sizeof(char*));
@@ -263,7 +265,7 @@ object_t* InitCar(window_t* w, int col, int posY, int posX, int speed)
 	object->height = 2;
 	object->y = posY;
 	object->x = posX;
-	object->speed = (speed % object->width) + 1;
+	object->speed = speed;
 	object->interval = 1;
 
 	object->appearance = (char**)malloc(sizeof(char*) * object->height); // 2D table of char(acter)s
@@ -285,17 +287,16 @@ road_t* InitRoad(window_t* w, int posY, int lanes, int numof_cars)
 	road->width = lanes;
 	road->numof_cars = numof_cars;
 	road->cars = (object_t**)malloc(road->numof_cars * sizeof(object_t*));
-	srand(time(NULL));
 	for (int i = 0; i < road->numof_cars; i++)
 	{
-		road->cars[i] = InitCar(w, CAR_COLOR1, road->y + (rand() % (lanes % 3) * 3) - 2 + 3, rand() % (COLS - BORDER) + BORDER, rand());
+		road->cars[i] = InitCar(w, CAR_COLOR1, road->y + (RA(0, 2)*3 - 2), RA(BORDER + 1, COLS - BORDER - 3), RA(FRAME_TIME/4, FRAME_TIME));
 	}
 	return road;
 }
 
 void MoveFrog(object_t* object, int ch, unsigned int frame)
 {
-	if (frame - object->interval >= FROG_JUMP_TIME)
+	if (frame - object->interval >= object->speed)
 	{
 		switch (ch) {
 			//case KEY_UP: Show(object, -1, 0); break;
@@ -313,9 +314,14 @@ void MoveFrog(object_t* object, int ch, unsigned int frame)
 
 void MoveCar(object_t* object, unsigned int frame)
 {
-	if (frame - object->interval >= FRAME_TIME)
+	if (frame - object->interval >= object->speed)
 	{
-		Show(object, 0, object->speed);
+		if (object->x == COLS - 2 * BORDER - object->width)
+		{
+			// TODO: clear space after car leaving the window
+			object->x = BORDER;
+		}
+		Show(object, 0, 1);
 		object->interval = frame;
 	}
 }
