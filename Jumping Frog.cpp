@@ -154,11 +154,31 @@ int CheckRoad(int y, int x)
 
 // ---------------------------status functions:---------------------------
 
+void ShowStatus(window_t* W, object_t* o)
+{
+	wattron(W->window, COLOR_PAIR(MAIN_COLOR));
+	mvwprintw(W->window, 0, 45, "x: %d  y: %d  ", o->x, o->y);
+	// TODO: points system
+	//mvwprintw(W->window, 1, 25, "%d", pts);
+	wrefresh(W->window);
+}
+
 void ShowTimer(window_t* W, float pass_time)
 {
 	wattron(W->window, COLOR_PAIR(MAIN_COLOR));
-	mvwprintw(W->window, 0, BORDER + 1, "%.2f", pass_time / 1000);
+	mvwprintw(W->window, 0, BORDER + 7, "%.2f", pass_time / 1000);
 	wrefresh(W->window);
+}
+
+void ShowNewStatus(window_t* W, timer_t* T, object_t* o, int pts)
+{
+	wattron(W->window, COLOR_PAIR(MAIN_COLOR));
+	mvwprintw(W->window, 0, BORDER+1, "Time: ");
+	mvwprintw(W->window, 0, 17, "Points: ");
+	ShowTimer(W, T->frame_time*T->frame_no);
+	mvwprintw(W->window, 0, 35, "Position: ");
+	mvwprintw(W->window, 0, 78, "Jumping-Frog-Game");
+	ShowStatus(W, o);
 }
 
 // ---------------------------OBJ+ FUNCTIONS:---------------------------
@@ -411,6 +431,7 @@ int MainLoop(window_t* status, object_t* frog, timer_t* timer, road_t** roads, i
 				if (Collision(frog, roads[i]->cars[j])) return 0; // TODO: lose procedure
 			}
 		}
+		ShowStatus(status, frog);
 		flushinp(); // clear input buffer (avoiding multiple key pressed)
 		UpdateTimer(timer, status);// update timer & sleep
 	}
@@ -437,6 +458,7 @@ int main()
 	for (int i = 0; i < numof_roads; i++)
 		PrintRoad(roads[i]);
 
+	ShowNewStatus(playwin, timer, frog, 0);
 	Show(frog, 0, 0);
 
 	if (MainLoop(playwin, frog, timer, roads, numof_roads) == 0)
