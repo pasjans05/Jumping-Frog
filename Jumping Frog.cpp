@@ -169,6 +169,14 @@ void Print(object_t* object)
 		mvwprintw(object->win->window, object->y + i, object->x, "%s", object->appearance[i]);
 }
 
+void PrintBlank(object_t* object)
+{
+	wattron(object->win->window, COLOR_PAIR(ROAD_COLOR));
+	for (int i = 0; i < object->height; i++)
+		for (int j=0; j<object->width; j++)
+			mvwprintw(object->win->window, object->y + i, object->x + j, " ");
+}
+
 void PrintRoad(road_t* road)
 {
 	wattron(road->win->window, COLOR_PAIR(road->colour));
@@ -338,7 +346,7 @@ void MoveCar(object_t* object, unsigned int frame)
 	{
 		if (object->x == COLS - 2 * BORDER - object->width)
 		{
-			// TODO: clear space after car leaving the window
+			PrintBlank(object);
 			object->x = BORDER;
 		}
 		Show(object, 0, 1);
