@@ -192,12 +192,16 @@ void PrintRoad(road_t* road)
 
 void Show(object_t* object, int moveY, int moveX)
 {
+	// 'rebuilding' lane bounding road or printing empty character after object passes 
 	char* sw = (char*)malloc((object->width + 1) * sizeof(char));
-	memset(sw, ' ', object->width);
+	if ((mvinch(object->y, object->x + 1) & A_CHARTEXT) == '-' || (mvinch(object->y, object->x - 1) & A_CHARTEXT) == '-')
+		memset(sw, '-', object->width);
+	else
+		memset(sw, ' ', object->width);
 	sw[object->width] = '\0';
 
 	// check whether to change background print colour based on current object position for blank space printing
-	CheckRoad(object->y, object->x) ? wattron(object->win->window, COLOR_PAIR(object->rd_colour)) : wattron(object->win->window, COLOR_PAIR(object->bckg_colour));
+	CheckRoad(object->y, object->x) ? wattron(object->win->window, COLOR_PAIR(ROAD_COLOR)) : wattron(object->win->window, COLOR_PAIR(object->bckg_colour));
 
 	// movements:
 	if ((moveY > 0) && (object->y + object->height < LINES - BORDER))
@@ -216,15 +220,29 @@ void Show(object_t* object, int moveY, int moveX)
 	{
 		object->x += moveX;
 		for (int i = 1; i <= moveX; i++)
+		{
 			for (int j = 0; j < object->height; j++)
-				mvwprintw(object->win->window, object->y + j, object->x - i, " ");
+			{
+				if ((mvinch(object->y, object->x) & A_CHARTEXT) == '-')
+					mvwprintw(object->win->window, object->y + j, object->x - i, "-");
+				else
+					mvwprintw(object->win->window, object->y + j, object->x - i, " ");
+			}
+		}
 	}
 	if ((moveX < 0) && (object->x > BORDER))
 	{
 		object->x += moveX;
 		for (int i = 1; i <= abs(moveX); i++)
+		{
 			for (int j = 0; j < object->height; j++)
-				mvwprintw(object->win->window, object->y + j, object->x + object->width + (i - 1), " ");
+			{
+				if ((mvinch(object->y, object->x) & A_CHARTEXT) == '-')
+					mvwprintw(object->win->window, object->y + j, object->x + object->width + (i - 1), "-");
+				else
+					mvwprintw(object->win->window, object->y + j, object->x + object->width + (i - 1), " ");
+			}
+		}
 	}
 
 	// check whether to change background print colour based on where object is abour to move
@@ -376,7 +394,7 @@ int MainLoop(window_t* status, object_t* frog, timer_t* timer, road_t** roads, i
 			if (frog->y == FINISH) return 0; // TODO: win procedure
 			
 		}
-		// movecar callout with collision checker (PARTIALLY WORKING)
+		// movecar callout with collision checker
 		for (int i = 0; i < numof_roads; i++)
 		{
 			for (int j = 0; j < roads[i]->numof_cars; j++)
