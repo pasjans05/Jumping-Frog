@@ -331,8 +331,8 @@ void MoveCar(object_t* object, unsigned int frame)
 // collision of two boxes
 int Collision(object_t* f, object_t* c)
 {
-	if (((f->y >= c->y && f->y < c->y + f->height) || (c->y >= f->y && c->y < f->y + f->height)) &&
-		((f->x >= c->x && f->x < c->x + f->width) || (c->x >= f->x && c->x < f->x + f->width)))
+	if (((f->y >= c->y && f->y < c->y + c->height) || (c->y >= f->y && c->y < f->y + f->height)) &&
+		((f->x >= c->x && f->x < c->x + c->width) || (c->x >= f->x && c->x < f->x + f->width)))
 		return 1;
 	else 	return 0;
 }
