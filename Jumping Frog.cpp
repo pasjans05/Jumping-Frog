@@ -6,8 +6,8 @@
 #include <time.h>
 
 // window size
-#define LINES 25
-#define COLS 110
+#define LINES 30
+#define COLS 120
 #define BORDER 1
 #define FINISH 1
 
@@ -18,6 +18,7 @@
 #define FROG_ROAD_COLOR 4
 #define CAR_COLOR1 5 // colour pair for enemy car
 #define CAR_COLOR2 6 // unused for now, colour pair for friendly car
+#define OBSTACLE_COLOR 7
 #define BACKGROUND_COLOR COLOR_WHITE
 
 // key definitions:
@@ -91,6 +92,7 @@ WINDOW* Start()
 	init_pair(ROAD_COLOR, COLOR_WHITE, COLOR_BLACK);
 	init_pair(FROG_ROAD_COLOR, COLOR_GREEN, COLOR_BLACK);
 	init_pair(CAR_COLOR1, COLOR_RED, COLOR_BLACK);
+	init_pair(OBSTACLE_COLOR, COLOR_CYAN, BACKGROUND_COLOR);
 
 	noecho(); // Switch off echoing, turn off cursor
 	curs_set(0);
@@ -276,6 +278,8 @@ void Show(object_t* object, int moveY, int moveX)
 	// check whether to change background print colour based on where object is abour to move
 	CheckRoad(object->y, object->x) ? wattron(object->win->window, COLOR_PAIR(object->rd_colour)) : wattron(object->win->window, COLOR_PAIR(object->bckg_colour));
 
+	
+
 	Print(object);
 
 	wrefresh(object->win->window);
@@ -305,7 +309,6 @@ object_t* InitFrog(window_t* w, int col, int roadcol)
 object_t* InitCar(window_t* w, int col, int posY, int posX, int speed)
 {
 	object_t* object = (object_t*)malloc(sizeof(object_t));
-	object->bckg_colour = col;
 	object->rd_colour = col;
 	object->win = w;
 	object->width = 3;
@@ -342,21 +345,59 @@ road_t* InitRoad(window_t* w, int posY, int lanes, int numof_cars)
 	return road;
 }
 
-void MoveFrog(object_t* object, int ch, unsigned int frame)
+object_t* InitObstacle(window_t* w, int posY, int posX, int col, int width, int height)
+{
+	object_t* object = (object_t*)malloc(sizeof(object_t));
+	object->win = w;
+	object->y = posY;
+	object->x = posX;
+	object->bckg_colour = col;
+	object->width = width;
+	object->height = height;
+
+	char* ob = (char*)malloc((object->width + 1) * sizeof(char));
+	memset(ob, '7', object->width);
+	ob[object->width] = '\0';
+
+	object->appearance = (char**)malloc(sizeof(char*) * object->height);
+	for (int i = 0; i < object->height; i++)
+	{
+		object->appearance[i] = (char*)malloc(sizeof(char) * (object->width + 1));
+		object->appearance[i] = ob + '\0';
+	}
+
+	return object;
+}
+
+// check for collision with any of the obstacles and if there are none move the object
+int ObstacleCheck(object_t** obstacles, int numof_obstacles, object_t* object, int moveY, int moveX)
+{
+	for (int i = 0; i < numof_obstacles; i++)
+	{
+		if (((object->y + moveY >= obstacles[i]->y && object->y + moveY < obstacles[i]->y + obstacles[i]->height) || (obstacles[i]->y >= object->y + moveY && obstacles[i]->y < object->y + object->height + moveY)) &&
+			((object->x + moveX >= obstacles[i]->x && object->x + moveX < obstacles[i]->x + obstacles[i]->width) || (obstacles[i]->x >= object->x + moveX && obstacles[i]->x < object->x + object->width + moveX))) return 1;
+	}
+	
+	Show(object, moveY, moveX);
+
+	return 0;
+}
+
+void MoveFrog(object_t* object, int ch, unsigned int frame, object_t** obstacle, int numof_obstacles)
 {
 	if (frame - object->interval >= object->speed)
 	{
+		object->interval = frame;
 		switch (ch) {
 			//case KEY_UP: Show(object, -1, 0); break;
 			//case KEY_DOWN: Show(object, 1, 0); break;
 			//case KEY_LEFT: Show(object, 0, -1); break;
 			//case KEY_RIGHT: Show(object, 0, 1);
-		case 'w': Show(object, -1, 0); break;
-		case 's': Show(object, 1, 0); break;
-		case 'a': Show(object, 0, -1); break;
-		case 'd': Show(object, 0, 1); break;
+		case 'w': ObstacleCheck(obstacle, numof_obstacles, object, -1, 0); break;
+		case 's': ObstacleCheck(obstacle, numof_obstacles, object, 1, 0); break;
+		case 'a': ObstacleCheck(obstacle, numof_obstacles, object, 0, -1); break;
+		case 'd': ObstacleCheck(obstacle, numof_obstacles, object, 0, 1); break;
 		}
-		object->interval = frame;
 	}
 }
 
@@ -380,8 +421,10 @@ int Collision(object_t* f, object_t* c)
 	if (((f->y >= c->y && f->y < c->y + c->height) || (c->y >= f->y && c->y < f->y + f->height)) &&
 		((f->x >= c->x && f->x < c->x + c->width) || (c->x >= f->x && c->x < f->x + f->width)))
 		return 1;
-	else 	return 0;
+	else return 0;
 }
+
+
 
 // ---------------------------timer functions:---------------------------
 
@@ -409,7 +452,7 @@ void UpdateTimer(timer_t* T, window_t* status)
 
 // ---------------------------main loop:---------------------------
 
-int MainLoop(window_t* status, object_t* frog, timer_t* timer, road_t** roads, int numof_roads)
+int MainLoop(window_t* status, object_t* frog, timer_t* timer, road_t** roads, int numof_roads, object_t** obstacles, int numof_obstacles)
 {
 	int ch;
 	int pts = 0;
@@ -418,7 +461,7 @@ int MainLoop(window_t* status, object_t* frog, timer_t* timer, road_t** roads, i
 		if (ch == ERR) ch = NOKEY; // ERR is ncurses predefined
 		else 
 		{
-			MoveFrog(frog, ch, timer->frame_no);
+			MoveFrog(frog, ch, timer->frame_no, obstacles, numof_obstacles);
 			if (frog->y == FINISH) return 0; // TODO: win procedure
 			
 		}
@@ -441,6 +484,7 @@ int MainLoop(window_t* status, object_t* frog, timer_t* timer, road_t** roads, i
 int main()
 {
 	int numof_roads = 2;
+	int numof_obstacles = 3;
 
 	WINDOW* mainwin = Start();
 
@@ -450,18 +494,27 @@ int main()
 
 	object_t* frog = InitFrog(playwin, FROG_COLOR, FROG_ROAD_COLOR);
 
+	object_t** obstacles = (object_t**)malloc(numof_obstacles * sizeof(object_t*));
+
 	road_t** roads = (road_t**)malloc(numof_roads * sizeof(road_t*));
 
 	roads[0] = InitRoad(playwin, 17, SINGLE_LANE, 2);
 	roads[1] = InitRoad(playwin, 5, DOUBLE_LANE, 4);
 
+	obstacles[0] = InitObstacle(playwin, 15, 20, OBSTACLE_COLOR, 10, 1);
+	obstacles[1] = InitObstacle(playwin, 13, 100, OBSTACLE_COLOR, 3, 3);
+	obstacles[2] = InitObstacle(playwin, 2, 40, OBSTACLE_COLOR, 8, 2);
+
 	for (int i = 0; i < numof_roads; i++)
 		PrintRoad(roads[i]);
+
+	for (int i = 0; i < numof_obstacles; i++)
+		Show(obstacles[i], 0, 0);
 
 	ShowNewStatus(playwin, timer, frog, 0);
 	Show(frog, 0, 0);
 
-	if (MainLoop(playwin, frog, timer, roads, numof_roads) == 0)
+	if (MainLoop(playwin, frog, timer, roads, numof_roads, obstacles, numof_obstacles) == 0)
 	{
 		delwin(playwin->window);
 		delwin(mainwin);
