@@ -14,11 +14,12 @@
 // colours:
 #define MAIN_COLOR 1
 #define FROG_COLOR 2
-#define ROAD_COLOR 3
-#define FROG_ROAD_COLOR 4
-#define CAR_COLOR1 5 // colour pair for enemy car
-#define CAR_COLOR2 6 // unused for now, colour pair for friendly car
-#define OBSTACLE_COLOR 7
+#define ROAD_EU_COLOR 3
+#define ROAD_US_COLOR 4
+#define FROG_ROAD_COLOR 5
+#define CAR_COLOR1 6 // colour pair for enemy car
+#define CAR_COLOR2 7 // unused for now, colour pair for friendly car
+#define OBSTACLE_COLOR 8
 #define BACKGROUND_COLOR COLOR_WHITE
 
 // key definitions:
@@ -26,7 +27,7 @@
 #define NOKEY		' '
 
 //time related definitions:
-#define FRAME_TIME	25 // 25 ms (base frame time) (time interval between frames)
+#define FRAME_TIME	10 // 25 ms (base frame time) (time interval between frames)
 #define FROG_JUMP_TIME 25
 
 // general definitions:
@@ -89,7 +90,8 @@ WINDOW* Start()
 	start_color(); // initialize colors
 	init_pair(MAIN_COLOR, COLOR_BLUE, BACKGROUND_COLOR);
 	init_pair(FROG_COLOR, COLOR_GREEN, BACKGROUND_COLOR);
-	init_pair(ROAD_COLOR, COLOR_WHITE, COLOR_BLACK);
+	init_pair(ROAD_EU_COLOR, COLOR_WHITE, COLOR_BLACK);
+	init_pair(ROAD_US_COLOR, COLOR_WHITE, COLOR_BLACK);
 	init_pair(FROG_ROAD_COLOR, COLOR_GREEN, COLOR_BLACK);
 	init_pair(CAR_COLOR1, COLOR_RED, COLOR_BLACK);
 	init_pair(OBSTACLE_COLOR, COLOR_CYAN, BACKGROUND_COLOR);
@@ -193,7 +195,7 @@ void Print(object_t* object)
 
 void PrintBlank(object_t* object)
 {
-	wattron(object->win->window, COLOR_PAIR(ROAD_COLOR));
+	wattron(object->win->window, COLOR_PAIR(ROAD_EU_COLOR));
 	for (int i = 0; i < object->height; i++)
 		for (int j=0; j<object->width; j++)
 			mvwprintw(object->win->window, object->y + i, object->x + j, " ");
@@ -231,7 +233,7 @@ void Show(object_t* object, int moveY, int moveX)
 	sw[object->width] = '\0';
 
 	// check whether to change background print colour based on current object position for blank space printing
-	CheckRoad(object->y, object->x) ? wattron(object->win->window, COLOR_PAIR(ROAD_COLOR)) : wattron(object->win->window, COLOR_PAIR(object->bckg_colour));
+	CheckRoad(object->y, object->x) ? wattron(object->win->window, COLOR_PAIR(ROAD_EU_COLOR)) : wattron(object->win->window, COLOR_PAIR(object->bckg_colour));
 
 	// movements:
 	if ((moveY > 0) && (object->y + object->height < LINES - BORDER))
@@ -331,11 +333,11 @@ object_t* InitCar(window_t* w, int col, int posY, int posX, int speed)
 road_t* InitRoad(window_t* w, int posY, int lanes, int numof_cars)
 {
 	road_t* road = (road_t*)malloc(sizeof(road_t));
-	road->colour = ROAD_COLOR;
+	road->colour = ROAD_EU_COLOR;
 	road->win = w;
 	road->y = posY;
 	road->width = lanes*3 + 1;
-	road->speed = RA(FRAME_TIME / 4, FRAME_TIME);
+	road->speed = RA(FRAME_TIME / 4, FRAME_TIME / 2 );
 	road->numof_cars = numof_cars;
 	road->cars = (object_t**)malloc(road->numof_cars * sizeof(object_t*));
 	for (int i = 0; i < road->numof_cars; i++)
@@ -405,7 +407,7 @@ void MoveCar(object_t* object, unsigned int frame)
 {
 	if (frame - object->interval >= object->speed)
 	{
-		if (object->x == COLS - 2 * BORDER - object->width)
+		if (object->x == COLS - BORDER - object->width)
 		{
 			PrintBlank(object);
 			object->x = BORDER;
@@ -483,6 +485,7 @@ int MainLoop(window_t* status, object_t* frog, timer_t* timer, road_t** roads, i
 
 int main()
 {
+	srand(time(NULL)); // new seed for each road definition
 	int numof_roads = 2;
 	int numof_obstacles = 3;
 
@@ -498,8 +501,8 @@ int main()
 
 	road_t** roads = (road_t**)malloc(numof_roads * sizeof(road_t*));
 
-	roads[0] = InitRoad(playwin, 17, SINGLE_LANE, 2);
-	roads[1] = InitRoad(playwin, 5, DOUBLE_LANE, 4);
+	roads[0] = InitRoad(playwin, 17, SINGLE_LANE, 6);
+	roads[1] = InitRoad(playwin, 5, DOUBLE_LANE, 8);
 
 	obstacles[0] = InitObstacle(playwin, 15, 20, OBSTACLE_COLOR, 10, 1);
 	obstacles[1] = InitObstacle(playwin, 13, 100, OBSTACLE_COLOR, 3, 3);
