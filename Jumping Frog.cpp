@@ -140,6 +140,7 @@ window_t* Init(WINDOW* parent, int lines, int cols, int y, int x, int colour, in
 	CleanWin(W);
 	if (delay == DELAY_OFF) // non-blocking reading of characters (for real-time game)
 		nodelay(W->window, TRUE);
+	keypad(W->window, TRUE);
 	wrefresh(W->window);
 	return W;
 }
@@ -392,10 +393,6 @@ void MoveFrog(object_t* object, int ch, unsigned int frame, object_t** obstacle,
 	{
 		object->interval = frame;
 		switch (ch) {
-			//case KEY_UP: Show(object, -1, 0); break;
-			//case KEY_DOWN: Show(object, 1, 0); break;
-			//case KEY_LEFT: Show(object, 0, -1); break;
-			//case KEY_RIGHT: Show(object, 0, 1);
 		case KEY_UP: ObstacleCheck(obstacle, numof_obstacles, object, -1, 0); break;
 		case KEY_DOWN: ObstacleCheck(obstacle, numof_obstacles, object, 1, 0); break;
 		case KEY_LEFT: ObstacleCheck(obstacle, numof_obstacles, object, 0, -1); break;
