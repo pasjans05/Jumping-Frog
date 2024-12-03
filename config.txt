@@ -1,9 +1,6 @@
-Size and shape of the frog: 1
-Q
+Size and shape of the frog (height, width): 1, 1 Q
 Car length (default 3): 3
 Shape of a car (single character repeated as a block): #
 Number of cars: 6
 Speed of cars (1-10): 5
-Car colour: COLOR_RED
-Obstacle colour: COLOR_YELLOW
 Road theme (USA/EURO): EURO
