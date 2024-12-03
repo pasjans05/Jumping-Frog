@@ -28,7 +28,7 @@
 
 //time related definitions:
 #define FRAME_TIME	10 // 25 ms (base frame time) (time interval between frames)
-#define FROG_JUMP_TIME 25
+#define FROG_JUMP_TIME 15
 
 // general definitions:
 #define DELAY_OFF	0
@@ -251,16 +251,17 @@ void Show(object_t* object, int moveY, int moveX)
 	if ((moveX > 0) && (object->x + object->width < COLS - BORDER))
 	{
 		object->x += moveX;
-		for (int i = 1; i <= moveX; i++)
-		{
-			for (int j = 0; j < object->height; j++)
+		if (object->x - moveX != 0)
+			for (int i = 1; i <= moveX; i++)
 			{
-				if ((mvinch(object->y, object->x) & A_CHARTEXT) == '-')
-					mvwprintw(object->win->window, object->y + j, object->x - i, "-");
-				else
-					mvwprintw(object->win->window, object->y + j, object->x - i, " ");
+				for (int j = 0; j < object->height; j++)
+				{
+					if ((mvinch(object->y, object->x) & A_CHARTEXT) == '-')
+						mvwprintw(object->win->window, object->y + j, object->x - i, "-");
+					else
+						mvwprintw(object->win->window, object->y + j, object->x - i, " ");
+				}
 			}
-		}
 	}
 	if ((moveX < 0) && (object->x > BORDER))
 	{
@@ -395,10 +396,10 @@ void MoveFrog(object_t* object, int ch, unsigned int frame, object_t** obstacle,
 			//case KEY_DOWN: Show(object, 1, 0); break;
 			//case KEY_LEFT: Show(object, 0, -1); break;
 			//case KEY_RIGHT: Show(object, 0, 1);
-		case 'w': ObstacleCheck(obstacle, numof_obstacles, object, -1, 0); break;
-		case 's': ObstacleCheck(obstacle, numof_obstacles, object, 1, 0); break;
-		case 'a': ObstacleCheck(obstacle, numof_obstacles, object, 0, -1); break;
-		case 'd': ObstacleCheck(obstacle, numof_obstacles, object, 0, 1); break;
+		case KEY_UP: ObstacleCheck(obstacle, numof_obstacles, object, -1, 0); break;
+		case KEY_DOWN: ObstacleCheck(obstacle, numof_obstacles, object, 1, 0); break;
+		case KEY_LEFT: ObstacleCheck(obstacle, numof_obstacles, object, 0, -1); break;
+		case KEY_RIGHT: ObstacleCheck(obstacle, numof_obstacles, object, 0, 1); break;
 		}
 	}
 }
@@ -410,7 +411,7 @@ void MoveCar(object_t* object, unsigned int frame)
 		if (object->x == COLS - BORDER - object->width)
 		{
 			PrintBlank(object);
-			object->x = BORDER;
+			object->x = BORDER - 1;
 		}
 		Show(object, 0, 1);
 		object->interval = frame;
