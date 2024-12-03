@@ -289,7 +289,7 @@ void Show(object_t* object, int moveY, int moveX)
 	wrefresh(object->win->window);
 }
 
-object_t* InitFrog(window_t* w, int col, int roadcol)
+object_t* InitFrog(window_t* w, int col, int roadcol) // frog initialisation; note: frog is of a constant size of 1x1 (single character)
 {
 	object_t* object = (object_t*)malloc(sizeof(object_t));
 	object->bckg_colour = col;
@@ -302,8 +302,8 @@ object_t* InitFrog(window_t* w, int col, int roadcol)
 	object->speed = FROG_JUMP_TIME;
 	object->interval = 0;
 
-	object->appearance = (char**)malloc(sizeof(char*) * object->height);
-	object->appearance[0] = (char*)malloc(sizeof(char) * object->width);
+	object->appearance = (char**)malloc(sizeof(char*));
+	object->appearance[0] = (char*)malloc(sizeof(char));
 
 	strcpy(object->appearance[0], "Q");
 
@@ -513,10 +513,16 @@ int MainLoop(window_t* status, object_t* frog, timer_t* timer, road_t** roads, i
 	return 0;
 }
 
+// ---------------------------config:---------------------------
+void readConfig(FILE* config_file, char* frogger_appeal, int* car_length, char* car_char)
+{
+	fscanf(config_file, "Size and shape of the frog: %c\n", frogger_appeal);
+	fscanf(config_file, "Car length (default 3): %d\n", car_length);
+	fscanf(config_file, "Shape of a car (single character repeated as a block): %c\n", car_char);
+}
+
 int main()
 {
-	
-
 	srand(time(NULL)); // new seed for each road definition
 	int numof_roads, numof_obstacles;
 
@@ -538,32 +544,16 @@ int main()
 	int car_length = 3;
 	
 	if (config_file != NULL)
-	{
-		fscanf(config_file, "Size and shape of the frog (height, width): %d, %d\n", &frog->width, &frog->height);
-		frog->appearance = (char**)malloc(sizeof(char*) * frog->height); // 2D table of char(acter)s
-		for (int i = 0; i < frog->height; i++)
-		{
-			frog->appearance[i] = (char*)malloc(sizeof(char) * (frog->width + 1));
-			for (int j = 0; j < frog->width; j++)
-			{
-				fscanf(config_file, "%c", &frog->appearance[i][j]);
-			}
-			frog->appearance[i][frog->width] = '\0';
-		}
-		fscanf(config_file, "Car length(default 3) : %d\n", &car_length);
-		fscanf(config_file, "Shape of a car (single character repeated as a block): %c\n", &car_char);
-	}
+		readConfig(config_file, &frog->appearance[0][0], &car_length, &car_char);
 
 	fclose(config_file);
 
 	object_t** obstacles;
-
 	road_t** roads;
 
 	Level1ne(&roads, &obstacles, &numof_roads, &numof_obstacles, playwin, car_length, car_char);
 
-	
-
+	// printing roads and obstacles on the screen:
 	for (int i = 0; i < numof_roads; i++)
 		PrintRoad(roads[i]);
 

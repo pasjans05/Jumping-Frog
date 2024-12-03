@@ -1,4 +1,4 @@
-Size and shape of the frog (height, width): 1, 1 Q
+Size and shape of the frog: Q
 Car length (default 3): 3
 Shape of a car (single character repeated as a block): #
 Number of cars: 6
