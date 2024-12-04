@@ -27,6 +27,7 @@
 #define ROAD_BACKGROUND_COLOR COLOR_BLACK
 
 // key definitions:
+#define ENGAGE_TAXI 'f' // key used to 'enter the taxi' - demand that the frog is catched by friendly car (taxi); key choice inspired by Grand Theft Auto game franchise
 #define QUIT		'q'
 #define NOKEY		' '
 
@@ -45,7 +46,7 @@
 #define DOUBLE_LANE 2 // 7 rows wide
 #define TRIPLE_LANE 3 // 10 rows wide
 
-#define RA(min, max) ( (min) + rand() % ((max) - (min) + 1) )			// random number between min and max (inc)
+#define RA(min, max) ( (min) + rand() % ((max) - (min) + 1) ) // random number between min and max (inc)
 
 const int numof_cars = 5;
 
@@ -67,7 +68,7 @@ typedef struct {
 	int speed; // speed per frame (how many frames betweeen moves)
 	int interval;
 	int width, height; // sizes
-	char** appearance; // shape of the object (2-dim characters array (box))
+	char** appearance; // shape of the object (2D characters array (box))
 } object_t;
 
 typedef struct {
@@ -173,7 +174,7 @@ void ShowStatus(window_t* W, object_t* o)
 	wattron(W->window, COLOR_PAIR(MAIN_COLOR));
 	mvwprintw(W->window, 0, 45, "x: %d  y: %d  ", o->x, o->y);
 	// TODO: points system
-	//mvwprintw(W->window, 1, 25, "%d", pts);
+	// mvwprintw(W->window, 1, 25, "%d", pts);
 	wrefresh(W->window);
 }
 
@@ -326,13 +327,16 @@ object_t* InitFrog(window_t* w, int col, int roadcol) // frog initialisation; no
 object_t* InitCar(window_t* w, int col, int posY, int posX, int speed, int car_length, char car_char)
 {
 	object_t* object = (object_t*)malloc(sizeof(object_t));
-	switch (RA(1, 10) % 2)
+	switch RA(0, 2)
 	{
 	case 0:
 		object->rd_colour = CAR_COLOR1;
 		break;
 	case 1:
 		object->rd_colour = CAR_COLOR2;
+		break;
+	case 2:
+		object->rd_colour = CAR_TAXI_COLOR;
 		break;
 	}
 	object->win = w;
@@ -472,7 +476,7 @@ void Sleep(unsigned int tui)
 {
 	clock_t start_time = clock();
 	clock_t end_time = start_time + (clock_t)(tui * CLOCKS_PER_SEC / 1000);
-	while (clock() < end_time) { /* busy loop */ }
+	while (clock() < end_time) { /* while that doesn't end until specified time */ }
 }
 
 timer_t* InitTimer(window_t* status)
@@ -539,7 +543,16 @@ int MainLoop(window_t* status, object_t* frog, timer_t* timer, road_t** roads, i
 			for (int j = 0; j < roads[i]->numof_cars; j++)
 			{
 				MoveCar(roads[i]->cars[j], timer->frame_no, roads[0]->colour); 
-				if (Collision(frog, roads[i]->cars[j])) return 0; // TODO: lose procedure
+				if (Collision(frog, roads[i]->cars[j]))
+				{
+					if (roads[i]->cars[j]->rd_colour == CAR_TAXI_COLOR)
+					{
+						// TODO: moving with taxi car
+					}
+					else
+						return 0; // TODO: lose procedure
+				}
+				Show(frog, 0, 0, roads[i]->colour);
 			}
 		}
 		ShowStatus(status, frog);
