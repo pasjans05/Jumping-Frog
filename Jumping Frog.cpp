@@ -417,13 +417,20 @@ object_t* InitObstacle(window_t* w, int posY, int posX, int col, int width, int 
 	return object;
 }
 
+// function to check whether object 2 is within (deltaY, deltaX) of object 1 (doesn't work diagonally i think), for direct collisions deltaX,Y = 0
+int Collision(object_t* ob1, object_t* ob2, int deltaY, int deltaX)
+{
+	if (((ob1->y + deltaY >= ob2->y && ob1->y + deltaY < ob2->y + ob2->height) || (ob2->y >= ob1->y + deltaY && ob2->y < ob1->y + ob1->height + deltaY)) &&
+		((ob1->x + deltaX >= ob2->x && ob1->x + deltaX < ob2->x + ob2->width) || (ob2->x >= ob1->x + deltaX && ob2->x < ob1->x + ob1->width + deltaX))) return 1;
+	return 0;
+}
+
 // check for collision with any of the obstacles and if there are none move the object
 int ObstacleCheck(object_t** obstacles, int numof_obstacles, object_t* object, int moveY, int moveX, int road_color)
 {
 	for (int i = 0; i < numof_obstacles; i++)
 	{
-		if (((object->y + moveY >= obstacles[i]->y && object->y + moveY < obstacles[i]->y + obstacles[i]->height) || (obstacles[i]->y >= object->y + moveY && obstacles[i]->y < object->y + object->height + moveY)) &&
-			((object->x + moveX >= obstacles[i]->x && object->x + moveX < obstacles[i]->x + obstacles[i]->width) || (obstacles[i]->x >= object->x + moveX && obstacles[i]->x < object->x + object->width + moveX))) return 1;
+		if (Collision(object, obstacles[i], moveY, moveX)) return 1;
 	}
 	
 	Show(object, moveY, moveX, road_color);
@@ -461,17 +468,6 @@ void MoveCar(object_t* object, object_t* frog, unsigned int frame, int road_colo
 		object->interval = frame;
 	}
 }
-
-// collision of two boxes
-int Collision(object_t* f, object_t* c)
-{
-	if (((f->y >= c->y && f->y < c->y + c->height) || (c->y >= f->y && c->y < f->y + f->height)) &&
-		((f->x >= c->x && f->x < c->x + c->width) || (c->x >= f->x && c->x < f->x + f->width)))
-		return 1;
-	else return 0;
-}
-
-
 
 // ---------------------------timer functions:---------------------------
 
@@ -545,7 +541,7 @@ int MainLoop(window_t* status, object_t* frog, timer_t* timer, road_t** roads, i
 			for (int j = 0; j < roads[i]->numof_cars; j++)
 			{
 				MoveCar(roads[i]->cars[j], frog, timer->frame_no, roads[0]->colour, (taxied && taxI == i && taxJ == j ? taxied : 0));
-				if (Collision(frog, roads[i]->cars[j]))
+				if (Collision(frog, roads[i]->cars[j], 0, 0))
 				{
 					if (roads[i]->cars[j]->rd_colour == CAR_TAXI_COLOR)
 					{
