@@ -2,5 +2,4 @@ Size and shape of the frog: Q
 Car length (default 3): 3
 Shape of a car (single character repeated as a block): #
 Cars speed multiplier (default 3, recommended between 2 and 5): 3
-Speed of cars (1-10): 5
-Road theme (USA/EURO): EURO
+Road theme (USA/EUR): EUR

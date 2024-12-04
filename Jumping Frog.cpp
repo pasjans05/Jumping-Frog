@@ -96,7 +96,7 @@ WINDOW* Start()
 	init_pair(MAIN_COLOR, COLOR_BLUE, BACKGROUND_COLOR);
 	init_pair(FROG_COLOR, COLOR_GREEN, BACKGROUND_COLOR);
 	init_pair(ROAD_EU_COLOR, COLOR_WHITE, COLOR_BLACK);
-	init_pair(ROAD_US_COLOR, COLOR_WHITE, COLOR_BLACK);
+	init_pair(ROAD_US_COLOR, COLOR_YELLOW, COLOR_BLACK);
 	init_pair(FROG_ROAD_COLOR, COLOR_GREEN, COLOR_BLACK);
 	init_pair(CAR_COLOR1, COLOR_RED, COLOR_BLACK);
 	init_pair(OBSTACLE_COLOR, COLOR_CYAN, BACKGROUND_COLOR);
@@ -274,7 +274,7 @@ void Movements(object_t* obj, int moveY, int moveX, char* trail)
 	}
 }
 
-void Show(object_t* object, int moveY, int moveX)
+void Show(object_t* object, int moveY, int moveX, int road_colour)
 {
 	// 'rebuilding' lane bounding road or printing empty character after object passes 
 	char* trail = (char*)malloc((object->width + 1) * sizeof(char));
@@ -285,7 +285,7 @@ void Show(object_t* object, int moveY, int moveX)
 	trail[object->width] = '\0';
 
 	// check whether to change background print colour based on current object position for blank space printing
-	CheckRoad(object->y, object->x) ? wattron(object->win->window, COLOR_PAIR(ROAD_EU_COLOR)) : wattron(object->win->window, COLOR_PAIR(object->bckg_colour));
+	CheckRoad(object->y, object->x) ? wattron(object->win->window, COLOR_PAIR(road_colour)) : wattron(object->win->window, COLOR_PAIR(object->bckg_colour));
 
 	// adjust y,x data stored in object_t and redraw background behind
 	Movements(object, moveY, moveX, trail);
@@ -362,10 +362,10 @@ void AllocateCars(road_t* road, int car_lngth, char car_char)
 	road->numof_cars = i;
 }
 
-road_t* InitRoad(window_t* w, int posY, int lanes, int car_lngth, char car_char, int car_speed)
+road_t* InitRoad(window_t* w, int posY, int lanes, int col, int car_lngth, char car_char, int car_speed)
 {
 	road_t* road = (road_t*)malloc(sizeof(road_t));
-	road->colour = ROAD_EU_COLOR;
+	road->colour = col;
 	road->win = w;
 	road->y = posY;
 	road->width = lanes*3 + 1;
@@ -402,7 +402,7 @@ object_t* InitObstacle(window_t* w, int posY, int posX, int col, int width, int 
 }
 
 // check for collision with any of the obstacles and if there are none move the object
-int ObstacleCheck(object_t** obstacles, int numof_obstacles, object_t* object, int moveY, int moveX)
+int ObstacleCheck(object_t** obstacles, int numof_obstacles, object_t* object, int moveY, int moveX, int road_color)
 {
 	for (int i = 0; i < numof_obstacles; i++)
 	{
@@ -410,26 +410,26 @@ int ObstacleCheck(object_t** obstacles, int numof_obstacles, object_t* object, i
 			((object->x + moveX >= obstacles[i]->x && object->x + moveX < obstacles[i]->x + obstacles[i]->width) || (obstacles[i]->x >= object->x + moveX && obstacles[i]->x < object->x + object->width + moveX))) return 1;
 	}
 	
-	Show(object, moveY, moveX);
+	Show(object, moveY, moveX, road_color);
 
 	return 0;
 }
 
-void MoveFrog(object_t* object, int ch, unsigned int frame, object_t** obstacle, int numof_obstacles)
+void MoveFrog(object_t* object, int ch, unsigned int frame, object_t** obstacle, int numof_obstacles, int road_color)
 {
 	if (frame - object->interval >= object->speed)
 	{
 		object->interval = frame;
 		switch (ch) {
-		case KEY_UP: ObstacleCheck(obstacle, numof_obstacles, object, -1, 0); break;
-		case KEY_DOWN: ObstacleCheck(obstacle, numof_obstacles, object, 1, 0); break;
-		case KEY_LEFT: ObstacleCheck(obstacle, numof_obstacles, object, 0, -1); break;
-		case KEY_RIGHT: ObstacleCheck(obstacle, numof_obstacles, object, 0, 1); break;
+		case KEY_UP: ObstacleCheck(obstacle, numof_obstacles, object, -1, 0, road_color); break;
+		case KEY_DOWN: ObstacleCheck(obstacle, numof_obstacles, object, 1, 0, road_color); break;
+		case KEY_LEFT: ObstacleCheck(obstacle, numof_obstacles, object, 0, -1, road_color); break;
+		case KEY_RIGHT: ObstacleCheck(obstacle, numof_obstacles, object, 0, 1, road_color); break;
 		}
 	}
 }
 
-void MoveCar(object_t* object, unsigned int frame)
+void MoveCar(object_t* object, unsigned int frame, int road_color)
 {
 	if (frame - object->interval >= object->speed)
 	{
@@ -438,7 +438,7 @@ void MoveCar(object_t* object, unsigned int frame)
 			PrintBlank(object);
 			object->x = BORDER - 1;
 		}
-		Show(object, 0, 1);
+		Show(object, 0, 1, road_color);
 		object->interval = frame;
 	}
 }
@@ -480,7 +480,7 @@ void UpdateTimer(timer_t* T, window_t* status)
 
 // ---------------------------levels:---------------------------
 
-void Level1ne(road_t*** roads, object_t*** obstacles, int* numof_roads, int* numof_obstacles, window_t* w, int car_length, char car_char, int car_speed)
+void Level1ne(road_t*** roads, object_t*** obstacles, int* numof_roads, int* numof_obstacles, window_t* w, int col, int car_length, char car_char, int car_speed)
 {
 	*numof_roads = 2;
 	*numof_obstacles = 4;
@@ -489,8 +489,8 @@ void Level1ne(road_t*** roads, object_t*** obstacles, int* numof_roads, int* num
 
 	road_t** roads1 = (road_t**)malloc(*numof_roads * sizeof(road_t*));
 
-	roads1[0] = InitRoad(w, 17, SINGLE_LANE, car_length, car_char, car_speed);
-	roads1[1] = InitRoad(w, 5, DOUBLE_LANE, car_length, car_char, car_speed);
+	roads1[0] = InitRoad(w, 17, SINGLE_LANE, col, car_length, car_char, car_speed);
+	roads1[1] = InitRoad(w, 5, DOUBLE_LANE, col, car_length, car_char, car_speed);
 
 	*roads = roads1;
 
@@ -517,7 +517,7 @@ int MainLoop(window_t* status, object_t* frog, timer_t* timer, road_t** roads, i
 		if (ch == ERR) ch = NOKEY; // ERR is ncurses predefined
 		else 
 		{
-			MoveFrog(frog, ch, timer->frame_no, obstacles, numof_obstacles);
+			MoveFrog(frog, ch, timer->frame_no, obstacles, numof_obstacles, roads[0]->colour);
 			if (frog->y == FINISH) return 0; // TODO: win procedure
 			
 		}
@@ -526,7 +526,7 @@ int MainLoop(window_t* status, object_t* frog, timer_t* timer, road_t** roads, i
 		{
 			for (int j = 0; j < roads[i]->numof_cars; j++)
 			{
-				MoveCar(roads[i]->cars[j], timer->frame_no);
+				MoveCar(roads[i]->cars[j], timer->frame_no, roads[0]->colour); 
 				if (Collision(frog, roads[i]->cars[j])) return 0; // TODO: lose procedure
 			}
 		}
@@ -538,12 +538,19 @@ int MainLoop(window_t* status, object_t* frog, timer_t* timer, road_t** roads, i
 }
 
 // ---------------------------config:---------------------------
-void ReadConfig(FILE* config_file, char* frogger_appeal, int* car_length, char* car_char, int* car_speed)
+void ReadConfig(FILE* config_file, char* frogger_appeal, int* car_length, char* car_char, int* car_speed, int* road_colour)
 {
+	char road_col[4]; // string storing type of road coloring theme (EUR/USA - 3 character long therefore string is 4 character long making space for null terminator '\0')
 	fscanf(config_file, "Size and shape of the frog: %c\n", frogger_appeal);
 	fscanf(config_file, "Car length (default 3): %d\n", car_length);
 	fscanf(config_file, "Shape of a car (single character repeated as a block): %c\n", car_char);
 	fscanf(config_file, "Cars speed multiplier (default 3, recommended between 2 and 5): %d\n", car_speed);
+	fscanf(config_file, "Road theme (USA/EUR): %s\n", &road_col);
+	if (road_col != NULL)
+	{
+		if (strcmp(road_col, "EUR") == 0) *road_colour = ROAD_EU_COLOR;
+		else if (strcmp(road_col, "USA") == 0) *road_colour = ROAD_US_COLOR;
+	}
 }
 
 int main()
@@ -567,26 +574,27 @@ int main()
 	char car_char = '#';
 	int car_length = 3;
 	int car_speed_multiplier = 3;
+	int road_color = ROAD_EU_COLOR;
 	
 	if (config_file != NULL)
-		ReadConfig(config_file, &frog->appearance[0][0], &car_length, &car_char, &car_speed_multiplier);
+		ReadConfig(config_file, &frog->appearance[0][0], &car_length, &car_char, &car_speed_multiplier, &road_color);
 
 	fclose(config_file);
 
 	object_t** obstacles;
 	road_t** roads;
 
-	Level1ne(&roads, &obstacles, &numof_roads, &numof_obstacles, playwin, car_length, car_char, car_speed_multiplier);
+	Level1ne(&roads, &obstacles, &numof_roads, &numof_obstacles, playwin, road_color, car_length, car_char, car_speed_multiplier);
 
 	// printing roads and obstacles on the screen:
 	for (int i = 0; i < numof_roads; i++)
 		PrintRoad(roads[i]);
 
 	for (int i = 0; i < numof_obstacles; i++)
-		Show(obstacles[i], 0, 0);
+		Show(obstacles[i], 0, 0, roads[0]->colour); // colour is taken from 1st road since it always has to exist and colour is common for all roads (defined at the start and may be changed by the config file)
 
 	ShowNewStatus(playwin, timer, frog, 0);
-	Show(frog, 0, 0);
+	Show(frog, 0, 0, roads[0]->colour);
 
 	if (MainLoop(playwin, frog, timer, roads, numof_roads, obstacles, numof_obstacles) == 0)
 	{
