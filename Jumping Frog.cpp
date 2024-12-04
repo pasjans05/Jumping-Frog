@@ -1,4 +1,6 @@
-﻿#define _CRT_SECURE_NO_WARNINGS
+﻿// this game was written using some base functions from demo game CATCH THE BALL
+
+#define _CRT_SECURE_NO_WARNINGS
 #include <curses.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -179,7 +181,7 @@ void ShowNewStatus(window_t* W, timer_t* T, object_t* o, int pts)
 {
 	wattron(W->window, COLOR_PAIR(MAIN_COLOR));
 	mvwprintw(W->window, 0, BORDER+1, "Time: ");
-	mvwprintw(W->window, 0, 17, "Points: ");
+	// mvwprintw(W->window, 0, 17, "Points: ");
 	ShowTimer(W, T->frame_time*T->frame_no);
 	mvwprintw(W->window, 0, 35, "Position: ");
 	mvwprintw(W->window, 0, 78, "Jumping-Frog-Game");
@@ -223,66 +225,70 @@ void PrintRoad(road_t* road)
 	wrefresh(road->win->window);
 }
 
+// function changing position of the object and replacing it's previous position with caracter that originaly were there
+void Movements(object_t* obj, int moveY, int moveX, char* trail)
+{	
+	if ((moveY > 0) && (obj->y + obj->height < LINES - BORDER))
+	{
+		obj->y += moveY;
+		for (int i = 1; i <= moveY; i++)
+			mvwprintw(obj->win->window, obj->y - i, obj->x, "%s", trail);
+	}
+	if ((moveY < 0) && (obj->y > BORDER))
+	{
+		obj->y += moveY;
+		for (int i = 1; i <= abs(moveY); i++)
+			mvwprintw(obj->win->window, obj->y + obj->height, obj->x, "%s", trail);
+	}
+	if ((moveX > 0) && (obj->x + obj->width < COLS - BORDER))
+	{
+		obj->x += moveX;
+		if (obj->x - moveX != 0)
+			for (int i = 1; i <= moveX; i++)
+			{
+				for (int j = 0; j < obj->height; j++)
+				{
+					if ((mvinch(obj->y, obj->x) & A_CHARTEXT) == '-')
+						mvwprintw(obj->win->window, obj->y + j, obj->x - i, "-");
+					else
+						mvwprintw(obj->win->window, obj->y + j, obj->x - i, " ");
+				}
+			}
+	}
+	if ((moveX < 0) && (obj->x > BORDER))
+	{
+		obj->x += moveX;
+		for (int i = 1; i <= abs(moveX); i++)
+		{
+			for (int j = 0; j < obj->height; j++)
+			{
+				if ((mvinch(obj->y, obj->x) & A_CHARTEXT) == '-')
+					mvwprintw(obj->win->window, obj->y + j, obj->x + obj->width + (i - 1), "-");
+				else
+					mvwprintw(obj->win->window, obj->y + j, obj->x + obj->width + (i - 1), " ");
+			}
+		}
+	}
+}
+
 void Show(object_t* object, int moveY, int moveX)
 {
 	// 'rebuilding' lane bounding road or printing empty character after object passes 
-	char* sw = (char*)malloc((object->width + 1) * sizeof(char));
+	char* trail = (char*)malloc((object->width + 1) * sizeof(char));
 	if ((mvinch(object->y, object->x + 1) & A_CHARTEXT) == '-' || (mvinch(object->y, object->x - 1) & A_CHARTEXT) == '-')
-		memset(sw, '-', object->width);
+		memset(trail, '-', object->width);
 	else
-		memset(sw, ' ', object->width);
-	sw[object->width] = '\0';
+		memset(trail, ' ', object->width);
+	trail[object->width] = '\0';
 
 	// check whether to change background print colour based on current object position for blank space printing
 	CheckRoad(object->y, object->x) ? wattron(object->win->window, COLOR_PAIR(ROAD_EU_COLOR)) : wattron(object->win->window, COLOR_PAIR(object->bckg_colour));
 
-	// movements:
-	if ((moveY > 0) && (object->y + object->height < LINES - BORDER))
-	{
-		object->y += moveY;
-		for (int i = 1; i <= moveY; i++)
-			mvwprintw(object->win->window, object->y - i, object->x, "%s", sw);
-	}
-	if ((moveY < 0) && (object->y > BORDER))
-	{
-		object->y += moveY;
-		for (int i = 1; i <= abs(moveY); i++)
-			mvwprintw(object->win->window, object->y + object->height, object->x, "%s", sw);
-	}
-	if ((moveX > 0) && (object->x + object->width < COLS - BORDER))
-	{
-		object->x += moveX;
-		if (object->x - moveX != 0)
-			for (int i = 1; i <= moveX; i++)
-			{
-				for (int j = 0; j < object->height; j++)
-				{
-					if ((mvinch(object->y, object->x) & A_CHARTEXT) == '-')
-						mvwprintw(object->win->window, object->y + j, object->x - i, "-");
-					else
-						mvwprintw(object->win->window, object->y + j, object->x - i, " ");
-				}
-			}
-	}
-	if ((moveX < 0) && (object->x > BORDER))
-	{
-		object->x += moveX;
-		for (int i = 1; i <= abs(moveX); i++)
-		{
-			for (int j = 0; j < object->height; j++)
-			{
-				if ((mvinch(object->y, object->x) & A_CHARTEXT) == '-')
-					mvwprintw(object->win->window, object->y + j, object->x + object->width + (i - 1), "-");
-				else
-					mvwprintw(object->win->window, object->y + j, object->x + object->width + (i - 1), " ");
-			}
-		}
-	}
+	// adjust y,x data stored in object_t and redraw background behind
+	Movements(object, moveY, moveX, trail);
 
 	// check whether to change background print colour based on where object is abour to move
 	CheckRoad(object->y, object->x) ? wattron(object->win->window, COLOR_PAIR(object->rd_colour)) : wattron(object->win->window, COLOR_PAIR(object->bckg_colour));
-
-	
 
 	Print(object);
 
