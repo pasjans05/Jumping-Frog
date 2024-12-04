@@ -19,10 +19,12 @@
 #define ROAD_EU_COLOR 3
 #define ROAD_US_COLOR 4
 #define FROG_ROAD_COLOR 5
-#define CAR_COLOR1 6 // colour pair for enemy car
-#define CAR_COLOR2 7 // unused for now, colour pair for friendly car
-#define OBSTACLE_COLOR 8
+#define CAR_TAXI_COLOR 6
+#define CAR_COLOR1 7 // colour pair for enemy car
+#define CAR_COLOR2 8 // unused for now, colour pair for friendly car
+#define OBSTACLE_COLOR 9
 #define BACKGROUND_COLOR COLOR_WHITE
+#define ROAD_BACKGROUND_COLOR COLOR_BLACK
 
 // key definitions:
 #define QUIT		'q'
@@ -95,10 +97,12 @@ WINDOW* Start()
 	start_color(); // initialize colors
 	init_pair(MAIN_COLOR, COLOR_BLUE, BACKGROUND_COLOR);
 	init_pair(FROG_COLOR, COLOR_GREEN, BACKGROUND_COLOR);
-	init_pair(ROAD_EU_COLOR, COLOR_WHITE, COLOR_BLACK);
-	init_pair(ROAD_US_COLOR, COLOR_YELLOW, COLOR_BLACK);
-	init_pair(FROG_ROAD_COLOR, COLOR_GREEN, COLOR_BLACK);
-	init_pair(CAR_COLOR1, COLOR_RED, COLOR_BLACK);
+	init_pair(ROAD_EU_COLOR, COLOR_WHITE, ROAD_BACKGROUND_COLOR);
+	init_pair(ROAD_US_COLOR, COLOR_YELLOW, ROAD_BACKGROUND_COLOR);
+	init_pair(FROG_ROAD_COLOR, COLOR_GREEN, ROAD_BACKGROUND_COLOR);
+	init_pair(CAR_TAXI_COLOR, COLOR_YELLOW, ROAD_BACKGROUND_COLOR);
+	init_pair(CAR_COLOR1, COLOR_RED, ROAD_BACKGROUND_COLOR);
+	init_pair(CAR_COLOR2, COLOR_MAGENTA, ROAD_BACKGROUND_COLOR);
 	init_pair(OBSTACLE_COLOR, COLOR_CYAN, BACKGROUND_COLOR);
 
 	noecho(); // Switch off echoing, turn off cursor
@@ -322,7 +326,15 @@ object_t* InitFrog(window_t* w, int col, int roadcol) // frog initialisation; no
 object_t* InitCar(window_t* w, int col, int posY, int posX, int speed, int car_length, char car_char)
 {
 	object_t* object = (object_t*)malloc(sizeof(object_t));
-	object->rd_colour = col;
+	switch (RA(1, 10) % 2)
+	{
+	case 0:
+		object->rd_colour = CAR_COLOR1;
+		break;
+	case 1:
+		object->rd_colour = CAR_COLOR2;
+		break;
+	}
 	object->win = w;
 	object->width = car_length;
 	object->height = 2;
