@@ -40,15 +40,17 @@
 #define DELAY_ON	1
 
 #define MIN_CAR_SEPARATION 6
-#define MAX_CAR_SEPARATION (4*MIN_CAR_SEPARATION)
+#define MAX_CAR_SEPARATION (3*MIN_CAR_SEPARATION)
+
+#define UNIQE_CARS 3 // number of types of cars: taxi, red enemy car, magenta semi-enemy car
+
+#define CAR_STOP_DISTANCE 2
 
 #define SINGLE_LANE 1 // 4 rows wide
 #define DOUBLE_LANE 2 // 7 rows wide
 #define TRIPLE_LANE 3 // 10 rows wide
 
 #define RA(min, max) ( (min) + rand() % ((max) - (min) + 1) ) // random number between min and max (inc)
-
-const int numof_cars = 5;
 
 // structures:
 typedef struct {
@@ -77,6 +79,7 @@ typedef struct {
 	int y; // top row of the road
 	int width; // road spreads for this many rows down from and including y
 	int speed; // speed of all cars using this road
+	int *stopped; // array of the size of number of lanes with each value either 1|0 - whether whole lane is stopped due to semi-enemy car or not (default: 0)
 	int numof_cars;
 	object_t** cars;
 } road_t;
@@ -85,6 +88,10 @@ typedef struct {
 	unsigned int frame_time;
 	int frame_no;
 } timer_t;
+
+// basic calculation functions:
+int LanesToX(int lanes) { return lanes * 3 + 1; }
+int XToLanes(int x) { return (x - 1) / 3; }
 
 WINDOW* Start()
 {
@@ -327,7 +334,7 @@ object_t* InitFrog(window_t* w, int col, int roadcol) // frog initialisation; no
 object_t* InitCar(window_t* w, int col, int posY, int posX, int speed, int car_length, char car_char)
 {
 	object_t* object = (object_t*)malloc(sizeof(object_t));
-	switch RA(0, 2)
+	switch RA(0, 2) // TODO: increase chances of red car (simoutanouesly decrease chances of other cars)
 	{
 	case 0:
 		object->rd_colour = CAR_COLOR1;
@@ -370,7 +377,7 @@ void AllocateCars(road_t* road, int car_lngth, char car_char)
 	for (i = 0; lastposX + car_lngth + MAX_CAR_SEPARATION < COLS - BORDER - car_lngth; i++)
 	{
 		road->cars = (object_t**)realloc(road->cars, (i+1)*sizeof(object_t*));
-		lane = road->y + (RA(0, (road->width - 1) / 3 - 1) * 3 + 1);
+		lane = road->y + LanesToX(RA(0, XToLanes(road->width) - 1));
 		posX = lastposX + car_lngth + RA(MIN_CAR_SEPARATION, MAX_CAR_SEPARATION);
 		road->cars[i] = InitCar(road->win, CAR_COLOR1, lane, posX, road->speed, car_lngth, car_char);
 		last_lane = lane; lastposX = posX;
@@ -384,9 +391,10 @@ road_t* InitRoad(window_t* w, int posY, int lanes, int col, int car_lngth, char 
 	road->colour = col;
 	road->win = w;
 	road->y = posY;
-	road->width = lanes*3 + 1;
-	road->speed = RA(FRAME_TIME / car_speed, FRAME_TIME / (car_speed/2));
-	road->numof_cars = numof_cars;
+	road->width = LanesToX(lanes);
+	road->speed = RA(FRAME_TIME / car_speed, FRAME_TIME / (car_speed/2)); // TODO: (optional) make speed an array so that each lane has a separate speed; OR/AND make one lane go in the other direction
+	road->stopped = (int*)malloc(lanes * sizeof(int));
+	for (int i = 0; i < lanes; i++) road->stopped[i] = 0;
 	
 	AllocateCars(road, car_lngth, car_char);
 
@@ -417,7 +425,7 @@ object_t* InitObstacle(window_t* w, int posY, int posX, int col, int width, int 
 	return object;
 }
 
-// function to check whether object 2 is within (deltaY, deltaX) of object 1 (doesn't work diagonally i think), for direct collisions deltaX,Y = 0
+// function to check whether object 1 is within (deltaY, deltaX) of object 2 (doesn't work diagonally i think), for direct collisions deltaX,Y = 0
 int Collision(object_t* ob1, object_t* ob2, int deltaY, int deltaX)
 {
 	if (((ob1->y + deltaY >= ob2->y && ob1->y + deltaY < ob2->y + ob2->height) || (ob2->y >= ob1->y + deltaY && ob2->y < ob1->y + ob1->height + deltaY)) &&
@@ -459,6 +467,7 @@ void MoveCar(object_t* object, object_t* frog, unsigned int frame, int road_colo
 		if (object->x == COLS - BORDER - object->width)
 		{
 			// TODO: if taxiing lose screen
+			// TODO: cars disappearing (changing attributes, delay (try to delay only when separation is greater than minimal and keep it greater than minimal despite delay))
 			PrintBlank(object);
 			object->x = BORDER - 1;
 		}
@@ -527,6 +536,7 @@ int MainLoop(window_t* status, object_t* frog, timer_t* timer, road_t** roads, i
 {
 	int ch, pts = 0;
 	int taxI, taxJ, taxied = 0; // taxi identification (i, j) indicating which vechicle is frog taxing with bool variable to check whether frog is currently traveling by taxi
+	int stopI, stopJ, currentLane; // variable to store lane information of current car
 	while ((ch = wgetch(status->window)) != QUIT) // NON-BLOCKING! (nodelay=TRUE)
 	{
 		if (ch == ERR) ch = NOKEY; // ERR is ncurses predefined
@@ -540,7 +550,9 @@ int MainLoop(window_t* status, object_t* frog, timer_t* timer, road_t** roads, i
 		{
 			for (int j = 0; j < roads[i]->numof_cars; j++)
 			{
-				MoveCar(roads[i]->cars[j], frog, timer->frame_no, roads[0]->colour, (taxied && taxI == i && taxJ == j ? taxied : 0));
+				currentLane = XToLanes(roads[i]->cars[j]->y - roads[i]->y);
+				if(roads[i]->stopped[currentLane] == 0) // moves car if current lane isn't stopped
+					MoveCar(roads[i]->cars[j], frog, timer->frame_no, roads[0]->colour, (taxied && taxI == i && taxJ == j ? taxied : 0));
 				if (Collision(frog, roads[i]->cars[j], 0, 0))
 				{
 					if (roads[i]->cars[j]->rd_colour == CAR_TAXI_COLOR)
@@ -562,6 +574,16 @@ int MainLoop(window_t* status, object_t* frog, timer_t* timer, road_t** roads, i
 					}
 					else
 						return 0; // TODO: lose procedure
+				}
+				else if (roads[i]->cars[j]->rd_colour == CAR_COLOR2) // semi-enemy car (magenta) operations (semi-enemy cars stop their lane when within CAR_STOP_DISTANCE of the frog)
+				{
+					if (!roads[i]->stopped[currentLane] && Collision(frog, roads[i]->cars[j], 0, -CAR_STOP_DISTANCE))
+					{
+						roads[i]->stopped[currentLane] = 1; // assign to the lane of the car stopped status
+						stopI = i; stopJ = j;
+					}
+					else if (roads[i]->stopped[currentLane] && !Collision(frog, roads[stopI]->cars[stopJ], 0, -CAR_STOP_DISTANCE))
+						roads[i]->stopped[currentLane] = 0; // 'reopen' the lane
 				}
 				Show(frog, 0, 0, roads[i]->colour); // refresh frog so it doesn't disappear under another asset
 			}
