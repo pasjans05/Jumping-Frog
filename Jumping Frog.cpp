@@ -93,6 +93,71 @@ typedef struct {
 int LanesToX(int lanes) { return lanes * 3 + 1; }
 int XToLanes(int x) { return (x - 1) / 3; }
 
+// ---------------------------window functions:---------------------------
+
+void PrintFrame(WINDOW* W)
+{
+	for (int i = 0; i < LINES; i++)
+	{
+		for (int j = 0; j < COLS; j++)
+		{
+			if (i == 0 && j == 0) mvwaddch(W, i, j, 201);
+			else if (i == 0 && j == COLS - 1) mvwaddch(W, i, j, 187);
+			else if (i == LINES - 1 && j == 0) mvwaddch(W, i, j, 200);
+			else if (i == LINES - 1 && j == COLS - 1) mvwaddch(W, i, j, 188);
+			else if (j == 0 || j == COLS - 1) mvwaddch(W, i, j, 186);
+			else if (i == 0 || i == LINES - 1) mvwaddch(W, i, j, 205);
+			else mvwaddch(W, i, j, ' ');
+		}
+	}
+	// name and index number:
+	mvwprintw(W, LINES - 1, BORDER + 1, "Stanislaw Kardas 203880");
+}
+
+void Welcome(WINDOW* win) // Welcome screen: press any key to continue
+{
+	wattron(win, COLOR_PAIR(MAIN_COLOR));
+	PrintFrame(win);
+	mvwaddstr(win, 1, 1, "Welcome to Jumping Frog: The Game");
+	wattron(win, COLOR_PAIR(FROG_COLOR));
+	mvwaddstr(win, 2, 1, "You are The Frog.");
+	wattron(win, COLOR_PAIR(CAR_COLOR1));
+	mvwaddstr(win, 3, 1, "Avoid cars of this colour.");
+	wattron(win, COLOR_PAIR(CAR_COLOR2));
+	mvwaddstr(win, 4, 1, "Cars of this colour will stop for you but still are dangerous.");
+	wattron(win, COLOR_PAIR(CAR_TAXI_COLOR));
+	mvwaddstr(win, 5, 1, "Taxis are friendly and can give you a lift when you press 'f'.");
+	wattron(win, COLOR_PAIR(OBSTACLE_COLOR));
+	mvwaddstr(win, 6, 1, "You can't pass obstacles.");
+	wattron(win, COLOR_PAIR(MAIN_COLOR));
+	mvwaddstr(win, 8, 1, "Press any key to start...");
+	wgetch(win); // waiting here..
+	wclear(win); // clear (after next refresh)
+	wrefresh(win);
+}
+
+void EndScreen(WINDOW* win) // End of the game screen: press any key to continue
+{
+	nodelay(win, FALSE);
+	wattron(win, COLOR_PAIR(MAIN_COLOR));
+	PrintFrame(win);
+	mvwaddstr(win, 1, 1, "The Game has ended.");
+	mvwaddstr(win, 2, 1, "You either won or lost, there is no way to tell at the moment.");
+	mvwaddstr(win, 3, 1, "Your time: "); // TODO: endscreen time
+	mvwaddstr(win, 4, 1, "Your points: "); // TODO: endscreen points (if ever implemented)
+	mvwaddstr(win, 5, 1, "Some sort of leaderboard perhaps.");
+	mvwaddstr(win, 6, 1, "I dont know what else should be on the endscreen.");
+	mvwaddstr(win, 8, 1, "Press any key to start...");
+	wgetch(win); // waiting here..
+	wclear(win); // clear (after next refresh)
+	wrefresh(win);
+
+	delwin(win);
+	endwin();
+	refresh();
+	exit(0);
+}
+
 WINDOW* Start()
 {
 	WINDOW* win;
@@ -121,24 +186,9 @@ WINDOW* Start()
 // default screen
 void CleanWin(window_t* W)
 {
-	int i, j;
 	wattron(W->window, COLOR_PAIR(W->colour));
 	// frame
-	for (int i = 0; i < LINES; i++)
-	{
-		for (int j = 0; j < COLS; j++)
-		{
-			if (i == 0 && j == 0) mvwaddch(W->window, i, j, 201);
-			else if (i == 0 && j == COLS - 1) mvwaddch(W->window, i, j, 187);
-			else if (i == LINES - 1 && j == 0) mvwaddch(W->window, i, j, 200);
-			else if (i == LINES - 1 && j == COLS - 1) mvwaddch(W->window, i, j, 188);
-			else if (j == 0 || j == COLS - 1) mvwaddch(W->window, i, j, 186);
-			else if (i == 0 || i == LINES - 1) mvwaddch(W->window, i, j, 205);
-			else mvwaddch(W->window, i, j, ' ');
-		}
-	}
-	// name and index number:
-	mvwprintw(W->window, LINES - 1, BORDER + 1, "Stanislaw Kardas 203880");
+	PrintFrame(W->window);
 
 	// finish line:
 	wattron(W->window, COLOR_PAIR(COLOR_GREEN, BACKGROUND_COLOR));
@@ -466,7 +516,7 @@ void MoveCar(object_t* object, object_t* frog, unsigned int frame, int road_colo
 	{
 		if (object->x == COLS - BORDER - object->width)
 		{
-			// TODO: if taxiing lose screen
+			if (taxiing) EndScreen(object->win->window);
 			// TODO: cars disappearing (changing attributes, delay (try to delay only when separation is greater than minimal and keep it greater than minimal despite delay))
 			PrintBlank(object);
 			object->x = BORDER - 1;
@@ -532,7 +582,7 @@ void Level1ne(road_t*** roads, object_t*** obstacles, int* numof_roads, int* num
 
 // ---------------------------main loop:---------------------------
 
-int MainLoop(window_t* status, object_t* frog, timer_t* timer, road_t** roads, int numof_roads, object_t** obstacles, int numof_obstacles)
+void MainLoop(window_t* status, object_t* frog, timer_t* timer, road_t** roads, int numof_roads, object_t** obstacles, int numof_obstacles)
 {
 	int ch, pts = 0;
 	int taxI, taxJ, taxied = 0; // taxi identification (i, j) indicating which vechicle is frog taxing with bool variable to check whether frog is currently traveling by taxi
@@ -543,7 +593,7 @@ int MainLoop(window_t* status, object_t* frog, timer_t* timer, road_t** roads, i
 		else if (!taxied)
 		{
 			MoveFrog(frog, ch, timer->frame_no, obstacles, numof_obstacles, roads[0]->colour);
-			if (frog->y == FINISH) return 0; // TODO: win procedure
+			if (frog->y == FINISH) EndScreen(status->window);
 		}
 		// movecar callout with collision checker
 		for (int i = 0; i < numof_roads; i++)
@@ -557,7 +607,6 @@ int MainLoop(window_t* status, object_t* frog, timer_t* timer, road_t** roads, i
 				{
 					if (roads[i]->cars[j]->rd_colour == CAR_TAXI_COLOR)
 					{
-						// TODO: magenta cars stop when you are near them
 						if (!taxied && ch == 'f')
 						{
 							taxied = 1; // indicate that frog is currently traveling by taxi
@@ -573,7 +622,7 @@ int MainLoop(window_t* status, object_t* frog, timer_t* timer, road_t** roads, i
 						}
 					}
 					else
-						return 0; // TODO: lose procedure
+						EndScreen(status->window);
 				}
 				else if (roads[i]->cars[j]->rd_colour == CAR_COLOR2) // semi-enemy car (magenta) operations (semi-enemy cars stop their lane when within CAR_STOP_DISTANCE of the frog)
 				{
@@ -592,7 +641,7 @@ int MainLoop(window_t* status, object_t* frog, timer_t* timer, road_t** roads, i
 		flushinp(); // clear input buffer (avoiding multiple key pressed)
 		UpdateTimer(timer, status);// update timer & sleep
 	}
-	return 0;
+	EndScreen(status->window);
 }
 
 // ---------------------------config:---------------------------
@@ -617,6 +666,8 @@ int main()
 	int numof_roads, numof_obstacles;
 
 	WINDOW* mainwin = Start();
+
+	Welcome(mainwin);
 
 	window_t* playwin = Init(mainwin, LINES, COLS, 0, 0, MAIN_COLOR, DELAY_OFF);
 
@@ -654,13 +705,5 @@ int main()
 	ShowNewStatus(playwin, timer, frog, 0);
 	Show(frog, 0, 0, roads[0]->colour);
 
-	if (MainLoop(playwin, frog, timer, roads, numof_roads, obstacles, numof_obstacles) == 0)
-	{
-		delwin(playwin->window);
-		delwin(mainwin);
-		endwin();
-		refresh();
-	}
-
-	return 0;
+	MainLoop(playwin, frog, timer, roads, numof_roads, obstacles, numof_obstacles);
 }
