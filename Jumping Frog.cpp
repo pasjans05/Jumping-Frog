@@ -21,7 +21,7 @@
 #define FROG_ROAD_COLOR 5
 #define CAR_TAXI_COLOR 6
 #define CAR_COLOR1 7 // colour pair for enemy car
-#define CAR_COLOR2 8 // unused for now, colour pair for friendly car
+#define CAR_COLOR2 8 // colour pair for semi-enemy car - it will stop when you approach
 #define OBSTACLE_COLOR 9
 #define BACKGROUND_COLOR COLOR_WHITE
 #define ROAD_BACKGROUND_COLOR COLOR_BLACK
@@ -445,16 +445,19 @@ void MoveFrog(object_t* object, int ch, unsigned int frame, object_t** obstacle,
 	}
 }
 
-void MoveCar(object_t* object, unsigned int frame, int road_color)
+void MoveCar(object_t* object, object_t* frog, unsigned int frame, int road_color, int taxiing)
 {
 	if (frame - object->interval >= object->speed)
 	{
 		if (object->x == COLS - BORDER - object->width)
 		{
+			// TODO: if taxiing lose screen
 			PrintBlank(object);
 			object->x = BORDER - 1;
 		}
+		if (taxiing) Show(frog, 0, 1, road_color);
 		Show(object, 0, 1, road_color);
+		
 		object->interval = frame;
 	}
 }
@@ -526,33 +529,45 @@ void Level1ne(road_t*** roads, object_t*** obstacles, int* numof_roads, int* num
 
 int MainLoop(window_t* status, object_t* frog, timer_t* timer, road_t** roads, int numof_roads, object_t** obstacles, int numof_obstacles)
 {
-	int ch;
-	int pts = 0;
+	int ch, pts = 0;
+	int taxI, taxJ, taxied = 0; // taxi identification (i, j) indicating which vechicle is frog taxing with bool variable to check whether frog is currently traveling by taxi
 	while ((ch = wgetch(status->window)) != QUIT) // NON-BLOCKING! (nodelay=TRUE)
 	{
 		if (ch == ERR) ch = NOKEY; // ERR is ncurses predefined
-		else 
+		else if (!taxied)
 		{
 			MoveFrog(frog, ch, timer->frame_no, obstacles, numof_obstacles, roads[0]->colour);
 			if (frog->y == FINISH) return 0; // TODO: win procedure
-			
 		}
 		// movecar callout with collision checker
 		for (int i = 0; i < numof_roads; i++)
 		{
 			for (int j = 0; j < roads[i]->numof_cars; j++)
 			{
-				MoveCar(roads[i]->cars[j], timer->frame_no, roads[0]->colour); 
+				MoveCar(roads[i]->cars[j], frog, timer->frame_no, roads[0]->colour, (taxied && taxI == i && taxJ == j ? taxied : 0));
 				if (Collision(frog, roads[i]->cars[j]))
 				{
 					if (roads[i]->cars[j]->rd_colour == CAR_TAXI_COLOR)
 					{
-						// TODO: moving with taxi car
+						// TODO: magenta cars stop when you are near them
+						if (!taxied && ch == 'f')
+						{
+							taxied = 1; // indicate that frog is currently traveling by taxi
+							taxI = i; taxJ = j; // indicate which taxi is frog currently traveling by
+						}
+						else if (taxied)
+						{
+							if (ch == 'f')
+							{
+								ObstacleCheck(obstacles, numof_obstacles, frog, -1, 0, roads[0]->colour); // moves frog one space up
+								taxied = 0;
+							}
+						}
 					}
 					else
 						return 0; // TODO: lose procedure
 				}
-				Show(frog, 0, 0, roads[i]->colour);
+				Show(frog, 0, 0, roads[i]->colour); // refresh frog so it doesn't disappear under another asset
 			}
 		}
 		ShowStatus(status, frog);
