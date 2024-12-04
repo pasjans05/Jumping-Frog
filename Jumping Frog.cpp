@@ -8,8 +8,8 @@
 #include <time.h>
 
 // window size
-#define LINES 30
-#define COLS 120
+// #define LINES 30
+// #define COLS 120
 #define BORDER 1
 #define FINISH 1
 
@@ -35,6 +35,9 @@
 // general definitions:
 #define DELAY_OFF	0
 #define DELAY_ON	1
+
+#define MIN_CAR_SEPARATION 6
+#define MAX_CAR_SEPARATION (4*MIN_CAR_SEPARATION)
 
 #define SINGLE_LANE 1 // 4 rows wide
 #define DOUBLE_LANE 2 // 7 rows wide
@@ -342,20 +345,35 @@ object_t* InitCar(window_t* w, int col, int posY, int posX, int speed, int car_l
 	return object;
 }
 
-road_t* InitRoad(window_t* w, int posY, int lanes, int numof_cars, int car_lngth, char car_char)
+void AllocateCars(road_t* road, int car_lngth, char car_char)
+{
+	road->cars = (object_t**)malloc(sizeof(object_t*));
+
+	int i, lane, last_lane = 0, posX, lastposX = BORDER + 1;
+
+	for (i = 0; lastposX + car_lngth + MAX_CAR_SEPARATION < COLS - BORDER - car_lngth; i++)
+	{
+		road->cars = (object_t**)realloc(road->cars, (i+1)*sizeof(object_t*));
+		lane = road->y + (RA(0, (road->width - 1) / 3 - 1) * 3 + 1);
+		posX = lastposX + car_lngth + RA(MIN_CAR_SEPARATION, MAX_CAR_SEPARATION);
+		road->cars[i] = InitCar(road->win, CAR_COLOR1, lane, posX, road->speed, car_lngth, car_char);
+		last_lane = lane; lastposX = posX;
+	}
+	road->numof_cars = i;
+}
+
+road_t* InitRoad(window_t* w, int posY, int lanes, int car_lngth, char car_char, int car_speed)
 {
 	road_t* road = (road_t*)malloc(sizeof(road_t));
 	road->colour = ROAD_EU_COLOR;
 	road->win = w;
 	road->y = posY;
 	road->width = lanes*3 + 1;
-	road->speed = RA(FRAME_TIME / 4, FRAME_TIME / 2 );
+	road->speed = RA(FRAME_TIME / car_speed, FRAME_TIME / (car_speed/2));
 	road->numof_cars = numof_cars;
-	road->cars = (object_t**)malloc(road->numof_cars * sizeof(object_t*));
-	for (int i = 0; i < road->numof_cars; i++)
-	{
-		road->cars[i] = InitCar(w, CAR_COLOR1, road->y + (RA(0, lanes - 1)*3 + 1), RA(BORDER + 1, COLS - BORDER - 3), road->speed, car_lngth, car_char); // TODO: car separation
-	}
+	
+	AllocateCars(road, car_lngth, car_char);
+
 	return road;
 }
 
@@ -462,7 +480,7 @@ void UpdateTimer(timer_t* T, window_t* status)
 
 // ---------------------------levels:---------------------------
 
-void Level1ne(road_t*** roads, object_t*** obstacles, int* numof_roads, int* numof_obstacles, window_t* w, int car_length, char car_char)
+void Level1ne(road_t*** roads, object_t*** obstacles, int* numof_roads, int* numof_obstacles, window_t* w, int car_length, char car_char, int car_speed)
 {
 	*numof_roads = 2;
 	*numof_obstacles = 4;
@@ -471,8 +489,8 @@ void Level1ne(road_t*** roads, object_t*** obstacles, int* numof_roads, int* num
 
 	road_t** roads1 = (road_t**)malloc(*numof_roads * sizeof(road_t*));
 
-	roads1[0] = InitRoad(w, 17, SINGLE_LANE, 6, car_length, car_char);
-	roads1[1] = InitRoad(w, 5, DOUBLE_LANE, 12, car_length, car_char);
+	roads1[0] = InitRoad(w, 17, SINGLE_LANE, car_length, car_char, car_speed);
+	roads1[1] = InitRoad(w, 5, DOUBLE_LANE, car_length, car_char, car_speed);
 
 	*roads = roads1;
 
@@ -520,11 +538,12 @@ int MainLoop(window_t* status, object_t* frog, timer_t* timer, road_t** roads, i
 }
 
 // ---------------------------config:---------------------------
-void readConfig(FILE* config_file, char* frogger_appeal, int* car_length, char* car_char)
+void ReadConfig(FILE* config_file, char* frogger_appeal, int* car_length, char* car_char, int* car_speed)
 {
 	fscanf(config_file, "Size and shape of the frog: %c\n", frogger_appeal);
 	fscanf(config_file, "Car length (default 3): %d\n", car_length);
 	fscanf(config_file, "Shape of a car (single character repeated as a block): %c\n", car_char);
+	fscanf(config_file, "Cars speed multiplier (default 3, recommended between 2 and 5): %d\n", car_speed);
 }
 
 int main()
@@ -540,7 +559,6 @@ int main()
 
 	object_t* frog = InitFrog(playwin, FROG_COLOR, FROG_ROAD_COLOR);
 
-	
 	// config file operations
 	FILE* config_file;
 	config_file = fopen("config.txt", "r");
@@ -548,16 +566,17 @@ int main()
 	// default values in case file read fails
 	char car_char = '#';
 	int car_length = 3;
+	int car_speed_multiplier = 3;
 	
 	if (config_file != NULL)
-		readConfig(config_file, &frog->appearance[0][0], &car_length, &car_char);
+		ReadConfig(config_file, &frog->appearance[0][0], &car_length, &car_char, &car_speed_multiplier);
 
 	fclose(config_file);
 
 	object_t** obstacles;
 	road_t** roads;
 
-	Level1ne(&roads, &obstacles, &numof_roads, &numof_obstacles, playwin, car_length, car_char);
+	Level1ne(&roads, &obstacles, &numof_roads, &numof_obstacles, playwin, car_length, car_char, car_speed_multiplier);
 
 	// printing roads and obstacles on the screen:
 	for (int i = 0; i < numof_roads; i++)
