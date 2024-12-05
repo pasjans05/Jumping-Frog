@@ -46,6 +46,7 @@
 
 #define CAR_STOP_DISTANCE 2
 #define CAR_CHANGE_CHANCE 5 // chance of a car disappearing when reaching the border and reappearing with changed attributes and possible delay are 1 in CAR_CHANGE_CHANCE
+#define SPEED_CHANGE_CHANCE 50 // chance of speed of cars to be changed
 
 #define SINGLE_LANE 1 // 4 rows wide
 #define DOUBLE_LANE 2 // 7 rows wide
@@ -441,6 +442,8 @@ void AllocateCars(road_t* road, int car_lngth, char car_char)
 	road->numof_cars = i;
 }
 
+int CarSpeed(int car_speed) { return RA(FRAME_TIME / car_speed, FRAME_TIME / (car_speed / 2)); }
+
 road_t* InitRoad(window_t* w, int posY, int lanes, int col, int car_lngth, char car_char, int car_speed)
 {
 	road_t* road = (road_t*)malloc(sizeof(road_t));
@@ -448,7 +451,7 @@ road_t* InitRoad(window_t* w, int posY, int lanes, int col, int car_lngth, char 
 	road->win = w;
 	road->y = posY;
 	road->width = LanesToX(lanes);
-	road->speed = RA(FRAME_TIME / car_speed, FRAME_TIME / (car_speed/2)); // TODO: (optional) make speed an array so that each lane has a separate speed; OR/AND make one lane go in the other direction
+	road->speed = CarSpeed(car_speed); // TODO: (optional) make speed an array so that each lane has a separate speed; OR/AND make one lane go in the other direction
 	road->stopped = (int*)malloc(lanes * sizeof(int));
 	for (int i = 0; i < lanes; i++) road->stopped[i] = 0;
 	
@@ -619,7 +622,7 @@ int CarSeparation(object_t** cars, int numof_cars, int i, int road_y)
 
 // ---------------------------main loop:---------------------------
 
-void MainLoop(window_t* status, object_t* frog, timer_t* timer, road_t** roads, int numof_roads, object_t** obstacles, int numof_obstacles)
+void MainLoop(window_t* status, object_t* frog, timer_t* timer, road_t** roads, int numof_roads, object_t** obstacles, int numof_obstacles, int car_speed)
 {
 	int ch, pts = 0;
 	int taxI, taxJ, taxied = 0; // taxi identification (i, j) indicating which vechicle is frog taxing with bool variable to check whether frog is currently traveling by taxi
@@ -672,6 +675,11 @@ void MainLoop(window_t* status, object_t* frog, timer_t* timer, road_t** roads, 
 						roads[i]->stopped[currentLane] = 0; // 'reopen' the lane
 				}
 				Show(frog, 0, 0, roads[i]->colour); // refresh frog so it doesn't disappear under another asset
+			}
+			if (RA(1, SPEED_CHANGE_CHANCE) % SPEED_CHANGE_CHANCE == 0)
+			{
+				roads[i]->speed = CarSpeed(car_speed);
+				for (int j = 0; j < roads[i]->numof_cars; j++) roads[i]->cars[j]->speed = roads[i]->speed;
 			}
 		}
 		ShowStatus(status, frog);
@@ -742,5 +750,5 @@ int main()
 	ShowNewStatus(playwin, timer, frog, 0);
 	Show(frog, 0, 0, roads[0]->colour);
 
-	MainLoop(playwin, frog, timer, roads, numof_roads, obstacles, numof_obstacles);
+	MainLoop(playwin, frog, timer, roads, numof_roads, obstacles, numof_obstacles, car_speed_multiplier);
 }
