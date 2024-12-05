@@ -69,7 +69,7 @@ typedef struct {
 	int bckg_colour; // normal color (background color as defined)
 	int rd_colour; // background color is road color
 	int x, y;
-	int speed; // speed per frame (how many frames betweeen moves)
+	int speed; // speed per frame (how many frames betweeen moves); for cars speed is coded so that sign indicates direction that the car is moving: + for right, - for left
 	int interval;
 	int width, height; // sizes
 	char** appearance; // shape of the object (2D characters array (box))
@@ -149,7 +149,7 @@ void EndScreen(WINDOW* win) // End of the game screen: press any key to continue
 	mvwaddstr(win, 4, 1, "Your points: "); // TODO: endscreen points (if ever implemented)
 	mvwaddstr(win, 5, 1, "Some sort of leaderboard perhaps.");
 	mvwaddstr(win, 6, 1, "I dont know what else should be on the endscreen.");
-	mvwaddstr(win, 8, 1, "Press any key to start...");
+	mvwaddstr(win, 8, 1, "Press any key to quit...");
 	wgetch(win); // waiting here..
 	wclear(win); // clear (after next refresh)
 	wrefresh(win);
@@ -325,16 +325,17 @@ void Movements(object_t* obj, int moveY, int moveX, char* trail)
 	if ((moveX < 0) && (obj->x > BORDER))
 	{
 		obj->x += moveX;
-		for (int i = 1; i <= abs(moveX); i++)
-		{
-			for (int j = 0; j < obj->height; j++)
+		if (obj->x - moveX != COLS - obj->width)
+			for (int i = 1; i <= abs(moveX); i++)
 			{
-				if ((mvinch(obj->y, obj->x) & A_CHARTEXT) == '-')
-					mvwprintw(obj->win->window, obj->y + j, obj->x + obj->width + (i - 1), "-");
-				else
-					mvwprintw(obj->win->window, obj->y + j, obj->x + obj->width + (i - 1), " ");
+				for (int j = 0; j < obj->height; j++)
+				{
+					if ((mvinch(obj->y, obj->x) & A_CHARTEXT) == '-')
+						mvwprintw(obj->win->window, obj->y + j, obj->x + obj->width + (i - 1), "-");
+					else
+						mvwprintw(obj->win->window, obj->y + j, obj->x + obj->width + (i - 1), " ");
+				}
 			}
-		}
 	}
 }
 
@@ -442,7 +443,7 @@ void AllocateCars(road_t* road, int car_lngth, char car_char)
 	road->numof_cars = i;
 }
 
-int CarSpeed(int car_speed) { return RA(FRAME_TIME / car_speed, FRAME_TIME / (car_speed / 2)); }
+int CarSpeed(int car_speed) { return (car_speed/abs(car_speed))*RA(FRAME_TIME / abs(car_speed), FRAME_TIME / (abs(car_speed) / 2)); } // cs/abs(cs) indicated direction: 1 for right, -1 for left
 
 road_t* InitRoad(window_t* w, int posY, int lanes, int col, int car_lngth, char car_char, int car_speed)
 {
@@ -519,32 +520,41 @@ void MoveFrog(object_t* object, int ch, unsigned int frame, object_t** obstacle,
 	}
 }
 
+void CarWrapping(object_t* object, int frame, int taxiing, int x_separation, int direction, int road_colour)
+{
+	PrintBlank(object);
+	if (direction > 0)
+		object->x = BORDER - 1;
+	else
+		object->x = COLS - BORDER - object->width + 1;
+
+	if (taxiing) EndScreen(object->win->window);
+	if (RA(1, CAR_CHANGE_CHANCE) % CAR_CHANGE_CHANCE == 0) // 1 in CAR_CHANGE_CHANCE chance of car changing
+	{
+		object->rd_colour = CarColour(); // car behaviour is connected to it's colour so changing car colour changes car
+		if (x_separation > MIN_CAR_SEPARATION)
+			object->interval = frame + RA(1, x_separation - MIN_CAR_SEPARATION); // time interval between previous car disappearing and new one appearing
+	}
+	else
+	{
+		object->interval = frame;
+		Show(object, 0, direction, road_colour);
+	}
+}
+
 void MoveCar(object_t* object, object_t* frog, int frame, int road_color, int taxiing, int x_separation)
 {
-	if (frame - object->interval >= object->speed)
+	int moveX = object->speed / abs(object->speed); // taking the direction data from speed
+	if (frame - object->interval >= abs(object->speed))
 	{
-		if (object->x == COLS - BORDER - object->width)
+		if ((moveX > 0 && object->x == COLS - BORDER - object->width) || (moveX < 0 && object->x == BORDER))
 		{
-			PrintBlank(object);
-			object->x = BORDER - 1;
-			if (taxiing) EndScreen(object->win->window);
-			// TODO: cars disappearing (changing attributes, delay (try to delay only when separation is greater than minimal and keep it greater than minimal despite delay))
-			if (RA(1, CAR_CHANGE_CHANCE) % CAR_CHANGE_CHANCE == 0) // 1 in CAR_CHANGE_CHANCE chance of car changing
-			{
-				object->rd_colour = CarColour(); // car behaviour is connected to it's colour so changing car colour changes car
-				if (x_separation > MIN_CAR_SEPARATION) 
-					object->interval = frame + RA(1, x_separation-MIN_CAR_SEPARATION); // time interval between previous car disappearing and new one appearing
-			}
-			else
-			{
-				object->interval = frame;
-				Show(object, 0, 1, road_color);
-			}
+			CarWrapping(object, frame, taxiing, x_separation, moveX, road_color);
 		}
 		else
 		{
-			if (taxiing) Show(frog, 0, 1, road_color);
-			Show(object, 0, 1, road_color);
+			if (taxiing) Show(frog, 0, moveX, road_color);
+			Show(object, 0, moveX, road_color);
 			object->interval = frame;
 		}
 	}
@@ -585,7 +595,7 @@ void Level1ne(road_t*** roads, object_t*** obstacles, int* numof_roads, int* num
 
 	road_t** roads1 = (road_t**)malloc(*numof_roads * sizeof(road_t*));
 
-	roads1[0] = InitRoad(w, 17, SINGLE_LANE, col, car_length, car_char, car_speed);
+	roads1[0] = InitRoad(w, 17, SINGLE_LANE, col, car_length, car_char, -car_speed);
 	roads1[1] = InitRoad(w, 5, DOUBLE_LANE, col, car_length, car_char, car_speed);
 
 	*roads = roads1;
@@ -666,19 +676,20 @@ void MainLoop(window_t* status, object_t* frog, timer_t* timer, road_t** roads, 
 				}
 				else if (roads[i]->cars[j]->rd_colour == CAR_COLOR2) // semi-enemy car (magenta) operations (semi-enemy cars stop their lane when within CAR_STOP_DISTANCE of the frog)
 				{
-					if (!roads[i]->stopped[currentLane] && Collision(frog, roads[i]->cars[j], 0, -CAR_STOP_DISTANCE))
+					int dir = roads[i]->cars[j]->speed / abs(roads[i]->cars[j]->speed);
+					if (!roads[i]->stopped[currentLane] && Collision(frog, roads[i]->cars[j], 0, -CAR_STOP_DISTANCE*dir))
 					{
 						roads[i]->stopped[currentLane] = 1; // assign to the lane of the car stopped status
 						stopI = i; stopJ = j;
 					}
-					else if (roads[i]->stopped[currentLane] && !Collision(frog, roads[stopI]->cars[stopJ], 0, -CAR_STOP_DISTANCE))
+					else if (roads[i]->stopped[currentLane] && !Collision(frog, roads[stopI]->cars[stopJ], 0, -CAR_STOP_DISTANCE*dir))
 						roads[i]->stopped[currentLane] = 0; // 'reopen' the lane
 				}
 				Show(frog, 0, 0, roads[i]->colour); // refresh frog so it doesn't disappear under another asset
 			}
 			if (RA(1, SPEED_CHANGE_CHANCE) % SPEED_CHANGE_CHANCE == 0)
 			{
-				roads[i]->speed = CarSpeed(car_speed);
+				roads[i]->speed = CarSpeed(car_speed*(roads[i]->speed/abs(roads[i]->speed)));
 				for (int j = 0; j < roads[i]->numof_cars; j++) roads[i]->cars[j]->speed = roads[i]->speed;
 			}
 		}
