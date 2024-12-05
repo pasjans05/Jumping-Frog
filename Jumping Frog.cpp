@@ -27,7 +27,7 @@
 #define ROAD_BACKGROUND_COLOR COLOR_BLACK
 
 // key definitions:
-#define ENGAGE_TAXI 'f' // key used to 'enter the taxi' - demand that the frog is catched by friendly car (taxi); key choice inspired by Grand Theft Auto game franchise
+#define ENGAGE_TAXI 'f' // key used to 'enter the taxi' - demand that the frog is catched by friendly car (taxi)
 #define QUIT		'q'
 #define NOKEY		' '
 
@@ -42,7 +42,7 @@
 #define MIN_CAR_SEPARATION 6
 #define MAX_CAR_SEPARATION (3*MIN_CAR_SEPARATION)
 
-#define UNIQE_CARS 3 // number of types of cars: taxi, red enemy car, magenta semi-enemy car
+#define UNIQE_CARS 3 // number of types of cars: taxi, color1 enemy car, color2 semi-enemy car
 
 #define CAR_STOP_DISTANCE 2
 #define CAR_CHANGE_CHANCE 5 // chance of a car disappearing when reaching the border and reappearing with changed attributes and possible delay are 1 in CAR_CHANGE_CHANCE
@@ -69,9 +69,8 @@ typedef struct {
 // moving object structure inside win(dow)
 typedef struct {
 	window_t* win;
-	// in case of cars both bckg and rd colours are the same
-	int bckg_colour; // normal color (background color as defined)
-	int rd_colour; // background color is road color
+	int bckg_colour; // normal color (background color as defined); in case of cars only rd colour is initialised
+	int rd_colour; // background color is road color; in case of cars only rd colour is initialised
 	int x, y;
 	int speed; // speed per frame (how many frames betweeen moves); for cars speed is coded so that sign indicates direction that the car is moving: + for right, - for left
 	int interval;
@@ -111,6 +110,7 @@ typedef struct {
 int LanesToX(int lanes) { return lanes * 3 + 1; }
 int XToLanes(int x) { return (x - 1) / 3; }
 
+// prints frame around the border and fills the middle with white characters
 void PrintFrame(WINDOW* W)
 {
 	for (int i = 0; i < LINES; i++)
@@ -132,6 +132,7 @@ void PrintFrame(WINDOW* W)
 
 // ---------------------------leaderboard (ranking) functions:---------------------------
 
+// check if leaderboard file exists and if so read it's content into array of leaderboard_t structs
 leaderboard_t** ReadLeaderboard(int* numof_leaderboard)
 {
 	FILE* ranking_file;
@@ -159,6 +160,7 @@ leaderboard_t** ReadLeaderboard(int* numof_leaderboard)
 	}
 }
 
+// override previous leaderboard file with it's updated version
 void SaveLeaderboard(leaderboard_t** leaderboard, int numof_leaderboard)
 {
 	FILE* ranking_file;
@@ -168,7 +170,40 @@ void SaveLeaderboard(leaderboard_t** leaderboard, int numof_leaderboard)
 	fclose(ranking_file);
 }
 
-void AddToLeaderboard(WINDOW* w, leaderboard_t** leaderboard, int* numof_leaderboard, int points, int win)
+// add new_entry to the leaderboard at the right position
+void AddToLeaderboard(leaderboard_t** leaderboard, int numof_leaderboard, leaderboard_t* new_entry)
+{
+	leaderboard_t* temp = (leaderboard_t*)malloc(sizeof(leaderboard_t));
+	for (int i = 0; i < numof_leaderboard; i++)
+	{
+		if (i == numof_leaderboard - 1)
+		{
+			leaderboard[i] = new_entry;
+			leaderboard[i]->no = i + 1;
+			free(temp);
+			break;
+		}
+		else if (new_entry->points > leaderboard[i]->points)
+		{
+			temp = leaderboard[i];
+			leaderboard[i] = new_entry;
+			leaderboard[i]->no = i + 1;
+			new_entry = temp;
+			for (int j = i + 1; j < numof_leaderboard; j++)
+			{
+				temp = leaderboard[j];
+				leaderboard[j] = new_entry;
+				leaderboard[j]->no = j + 1;
+				new_entry = temp;
+			}
+			free(temp);
+			break;
+		}
+	}
+}
+
+// create new entry to be added leaderboard and callout function that saves it to file
+void AddLeaderboardEntry(WINDOW* w, leaderboard_t** leaderboard, int* numof_leaderboard, int points, int win)
 {
 	leaderboard_t* new_entry = (leaderboard_t*)malloc(sizeof(leaderboard_t));
 	new_entry->points = points;
@@ -200,32 +235,12 @@ void AddToLeaderboard(WINDOW* w, leaderboard_t** leaderboard, int* numof_leaderb
 	else
 		leaderboard = (leaderboard_t**)realloc(leaderboard, *numof_leaderboard * sizeof(leaderboard_t*));
 	leaderboard[*numof_leaderboard - 1] = (leaderboard_t*)malloc(sizeof(leaderboard_t));
-	leaderboard_t* temp = (leaderboard_t*)malloc(sizeof(leaderboard_t));
-	for (i = 0; i < *numof_leaderboard; i++)
-	{
-		if (i == *numof_leaderboard - 1)
-		{
-			leaderboard[i] = new_entry;
-			leaderboard[i]->no = i + 1;
-			break;
-		}
-		else if (new_entry->points > leaderboard[i]->points)
-		{
-			temp = leaderboard[i];
-			leaderboard[i] = new_entry;
-			leaderboard[i]->no = i + 1;
-			new_entry = temp;
-			for (int j = i + 1; j < *numof_leaderboard; j++)
-			{
-				temp = leaderboard[j];
-				leaderboard[j] = new_entry;
-				leaderboard[j]->no = j + 1;
-				new_entry = temp;
-			}
-			break;
-		}
-	}
+	
+	AddToLeaderboard(leaderboard, *numof_leaderboard, new_entry);
+	
 	SaveLeaderboard(leaderboard, *numof_leaderboard);
+
+	free(new_entry);
 }
 
 void PrintLeaderboard(WINDOW* win, leaderboard_t** leaderboard, int numof_leaderboard)
@@ -243,7 +258,8 @@ void PrintLeaderboard(WINDOW* win, leaderboard_t** leaderboard, int numof_leader
 
 // ---------------------------window functions:---------------------------
 
-void Welcome(WINDOW* win, leaderboard_t** leaderboard, int numof_leaderboard) // Welcome screen: press any key to continue
+// Welcome screen: press any key to continue
+void Welcome(WINDOW* win, leaderboard_t** leaderboard, int numof_leaderboard)
 {
 	wattron(win, COLOR_PAIR(MAIN_COLOR));
 	PrintFrame(win);
@@ -268,7 +284,8 @@ void Welcome(WINDOW* win, leaderboard_t** leaderboard, int numof_leaderboard) //
 	wrefresh(win);
 }
 
-void EndScreen(WINDOW* w, int win, int pts, leaderboard_t** leaderboard, int numof_leaderboard) // End of the game screen: press any key to continue
+// End of the game screen: press any key to continue
+void EndScreen(WINDOW* w, int win, int pts, leaderboard_t** leaderboard, int numof_leaderboard)
 {
 	nodelay(w, FALSE);
 	wattron(w, COLOR_PAIR(MAIN_COLOR));
@@ -291,7 +308,7 @@ void EndScreen(WINDOW* w, int win, int pts, leaderboard_t** leaderboard, int num
 
 		if (ch == 'l')
 		{
-			AddToLeaderboard(w, leaderboard, &numof_leaderboard, pts, win);
+			AddLeaderboardEntry(w, leaderboard, &numof_leaderboard, pts, win);
 			EndScreen(w, -1, pts, ReadLeaderboard(&numof_leaderboard), numof_leaderboard); // -1 in win parameter make the function not ask about leaderboard addition
 		}
 		else
@@ -316,6 +333,7 @@ void EndScreen(WINDOW* w, int win, int pts, leaderboard_t** leaderboard, int num
 	exit(0);
 }
 
+// window start parameters and initialization
 WINDOW* Start()
 {
 	WINDOW* win;
@@ -324,6 +342,8 @@ WINDOW* Start()
 		fprintf(stderr, "Error initialising ncurses.\n");
 		exit(EXIT_FAILURE);
 	}
+
+	keypad(win, TRUE); // make keypad work as input (for arrow)
 
 	start_color(); // initialize colors
 	init_pair(MAIN_COLOR, COLOR_BLUE, BACKGROUND_COLOR);
@@ -365,11 +385,11 @@ window_t* Init(WINDOW* parent, int lines, int cols, int y, int x, int colour, in
 	CleanWin(W);
 	if (delay == DELAY_OFF) // non-blocking reading of characters (for real-time game)
 		nodelay(W->window, TRUE);
-	keypad(W->window, TRUE);
 	wrefresh(W->window);
 	return W;
 }
 
+// check if at position (y,x) background colour matches background colour set for roads
 int CheckRoad(int y, int x)
 {
 	chtype ch = mvinch(y, x);
@@ -377,7 +397,7 @@ int CheckRoad(int y, int x)
 
 	short foregrnd, bckgrnd;
 	pair_content(color_pair, &foregrnd, &bckgrnd); // extract foreground and background color from color_pair
-	if (bckgrnd == COLOR_BLACK)
+	if (bckgrnd == ROAD_BACKGROUND_COLOR)
 		return 1;
 	return 0;
 }
@@ -412,20 +432,23 @@ void ShowNewStatus(window_t* W, timer_t* T, object_t* o, int pts)
 
 // ---------------------------object_t and other structure-related functions:---------------------------
 
+// shows object on the screen
 void Print(object_t* object)
 {
 	for (int i = 0; i < object->height; i++)
 		mvwprintw(object->win->window, object->y + i, object->x, "%s", object->appearance[i]);
 }
 
+// replaces object position with blank space
 void PrintBlank(object_t* object)
 {
-	wattron(object->win->window, COLOR_PAIR(ROAD_EU_COLOR));
+	wattron(object->win->window, COLOR_PAIR(ROAD_EU_COLOR)); // any road colour pair can be used as we are onlu interested in background colour
 	for (int i = 0; i < object->height; i++)
 		for (int j=0; j<object->width; j++)
 			mvwprintw(object->win->window, object->y + i, object->x + j, " ");
 }
 
+// shows road on the screen
 void PrintRoad(road_t* road)
 {
 	wattron(road->win->window, COLOR_PAIR(road->colour));
@@ -447,25 +470,25 @@ void PrintRoad(road_t* road)
 	wrefresh(road->win->window);
 }
 
-// function changing position of the object and replacing it's previous position with caracter that originaly were there
+// function changing position of the object and replacing it's previous position with character that originaly were there
 void Movements(object_t* obj, int moveY, int moveX, char* trail)
 {	
-	if ((moveY > 0) && (obj->y + obj->height < LINES - BORDER))
+	if ((moveY > 0) && (obj->y + obj->height < LINES - BORDER)) // moving down
 	{
 		obj->y += moveY;
 		for (int i = 1; i <= moveY; i++)
 			mvwprintw(obj->win->window, obj->y - i, obj->x, "%s", trail);
 	}
-	if ((moveY < 0) && (obj->y > BORDER))
+	if ((moveY < 0) && (obj->y > BORDER)) // moving up
 	{
 		obj->y += moveY;
 		for (int i = 1; i <= abs(moveY); i++)
 			mvwprintw(obj->win->window, obj->y + obj->height, obj->x, "%s", trail);
 	}
-	if ((moveX > 0) && (obj->x + obj->width < COLS - BORDER))
+	if ((moveX > 0) && (obj->x + obj->width < COLS - BORDER)) // moving right
 	{
 		obj->x += moveX;
-		if (obj->x - moveX != 0)
+		if (obj->x - moveX != 0) // so that frame isn't overwriten with object's blank space trail
 			for (int i = 1; i <= moveX; i++)
 			{
 				for (int j = 0; j < obj->height; j++)
@@ -477,10 +500,10 @@ void Movements(object_t* obj, int moveY, int moveX, char* trail)
 				}
 			}
 	}
-	if ((moveX < 0) && (obj->x > BORDER))
+	if ((moveX < 0) && (obj->x > BORDER)) // moving left
 	{
 		obj->x += moveX;
-		if (obj->x - moveX != COLS - obj->width)
+		if (obj->x - moveX != COLS - obj->width) // so that frame isn't overwriten with object's blank space trail
 			for (int i = 1; i <= abs(moveX); i++)
 			{
 				for (int j = 0; j < obj->height; j++)
@@ -494,6 +517,7 @@ void Movements(object_t* obj, int moveY, int moveX, char* trail)
 	}
 }
 
+// universal function to print any object_t to the screen
 void Show(object_t* object, int moveY, int moveX, int road_colour)
 {
 	// 'rebuilding' lane bounding road or printing empty character after object passes 
@@ -518,7 +542,8 @@ void Show(object_t* object, int moveY, int moveX, int road_colour)
 	wrefresh(object->win->window);
 }
 
-object_t* InitFrog(window_t* w, int col, int roadcol) // frog initialisation; note: frog is of a constant size of 1x1 (single character)
+// frog initialisation; note: frog is of a constant size of 1x1 (single character)
+object_t* InitFrog(window_t* w, int col, int roadcol)
 {
 	object_t* object = (object_t*)malloc(sizeof(object_t));
 	object->bckg_colour = col;
@@ -539,22 +564,24 @@ object_t* InitFrog(window_t* w, int col, int roadcol) // frog initialisation; no
 	return object;
 }
 
+// function to randomly choose car colour (in case of cars attributes are strictly related to colour)
 int CarColour()
 {
 	switch RA(0, 3)
 	{
-	case 0: case 1:
+	case 0: case 1: // greater chance for ordinary enemy car
 		return CAR_COLOR1;
 		break;
-	case 2:
+	case 2: // semi-enemy car that stops when near the frog
 		return CAR_COLOR2;
 		break;
-	case 3:
+	case 3: // friendly car - taxi that can give the frog a lift on demand
 		return CAR_TAXI_COLOR;
 		break;
 	}
 }
 
+// initialise all car's parameters
 object_t* InitCar(window_t* w, int posY, int posX, int speed, int car_length, char car_char)
 {
 	object_t* object = (object_t*)malloc(sizeof(object_t));
@@ -581,6 +608,7 @@ object_t* InitCar(window_t* w, int posY, int posX, int speed, int car_length, ch
 	return object;
 }
 
+// randomly assigns cars to a lane while maintaining proper separation between cars on the same lane
 void AllocateCars(road_t* road, int car_lngth, char car_char)
 {
 	road->cars = (object_t**)malloc(sizeof(object_t*));
@@ -590,16 +618,18 @@ void AllocateCars(road_t* road, int car_lngth, char car_char)
 	for (i = 0; lastposX + car_lngth + MAX_CAR_SEPARATION < COLS - BORDER - car_lngth; i++)
 	{
 		road->cars = (object_t**)realloc(road->cars, (i+1)*sizeof(object_t*));
-		lane = road->y + LanesToX(RA(0, XToLanes(road->width) - 1));
-		posX = lastposX + car_lngth + RA(MIN_CAR_SEPARATION, MAX_CAR_SEPARATION);
-		road->cars[i] = InitCar(road->win, lane, posX, road->speed, car_lngth, car_char);
+		lane = road->y + LanesToX(RA(0, XToLanes(road->width) - 1)); // randomly generate lane (y) for the car
+		posX = lastposX + car_lngth + RA(MIN_CAR_SEPARATION, MAX_CAR_SEPARATION); // randomly generate separation from the last car (x)
+		road->cars[i] = InitCar(road->win, lane, posX, road->speed, car_lngth, car_char); // assign generated parameters to the car
 		last_lane = lane; lastposX = posX;
 	}
 	road->numof_cars = i;
 }
 
+// randomly generate speed for lane of cars while maintaining original predetermined direction of traffic
 int CarSpeed(int car_speed) { return (car_speed/abs(car_speed))*RA(FRAME_TIME / abs(car_speed), FRAME_TIME / (abs(car_speed) / 2)); } // cs/abs(cs) indicated direction: 1 for right, -1 for left
 
+// initialise all road parameters and call out function to assign cars to this road
 road_t* InitRoad(window_t* w, int posY, int lanes, int col, int car_lngth, char car_char, int car_speed)
 {
 	road_t* road = (road_t*)malloc(sizeof(road_t));
@@ -616,6 +646,7 @@ road_t* InitRoad(window_t* w, int posY, int lanes, int col, int car_lngth, char 
 	return road;
 }
 
+// initialise obstacle parameters
 object_t* InitObstacle(window_t* w, int posY, int posX, int col, int width, int height)
 {
 	object_t* object = (object_t*)malloc(sizeof(object_t));
@@ -640,6 +671,7 @@ object_t* InitObstacle(window_t* w, int posY, int posX, int col, int width, int 
 	return object;
 }
 
+// initialise starting points parameters
 point_t* InitPoints()
 {
 	point_t* points = (point_t*)malloc(sizeof(point_t));
@@ -649,10 +681,11 @@ point_t* InitPoints()
 	return points;
 }
 
+// formula to calculate points from how much time has passed between moves classified as progres (frog appearing to new y line, not revisiting a lane)
 int CalculatePoints(int frame_delta)
 {
 	int points = (MAX_POINTS_TIME * FROG_JUMP_TIME) / (frame_delta);
-	return (points > 0 ? points : 1);
+	return (points > 0 ? points : 1); // minimum point for a move is 1
 }
 
 // function to check whether object 1 is within (deltaY, deltaX) of object 2 (doesn't work diagonally i think), for direct collisions deltaX,Y = 0
@@ -670,7 +703,7 @@ int ObstacleCheck(object_t** obstacles, int numof_obstacles, object_t* object, i
 	{
 		if (Collision(object, obstacles[i], moveY, moveX)) return 1;
 	}
-	if (object->y + moveY < points->y_progres)
+	if (object->y + moveY < points->y_progres) // whether frog has already made progress up to this lane
 	{
 		points->points_count += CalculatePoints(frame - points->last_y_progres_frame);
 		points->last_y_progres_frame = frame;
@@ -681,6 +714,7 @@ int ObstacleCheck(object_t** obstacles, int numof_obstacles, object_t* object, i
 	return 0;
 }
 
+// if sufficient time has passed (minimal frog jump time) check input for direction the frog is supposed to move next
 void MoveFrog(object_t* object, int ch, unsigned int frame, object_t** obstacle, int numof_obstacles, int road_color, point_t* points)
 {
 	if (frame - object->interval >= object->speed)
@@ -695,6 +729,7 @@ void MoveFrog(object_t* object, int ch, unsigned int frame, object_t** obstacle,
 	}
 }
 
+// car behaviour when it reaches the border; some cars may reappear with delay and changed attributes
 void CarWrapping(object_t* object, int frame, int taxiing, int x_separation, int direction, int road_colour, int pts, leaderboard_t** leaderboard, int numof_leaderboard)
 {
 	PrintBlank(object);
@@ -704,25 +739,26 @@ void CarWrapping(object_t* object, int frame, int taxiing, int x_separation, int
 		object->x = COLS - BORDER - object->width + 1;
 
 	if (taxiing) EndScreen(object->win->window, 0, pts, leaderboard, numof_leaderboard);
-	if (RA(1, CAR_CHANGE_CHANCE) % CAR_CHANGE_CHANCE == 0) // 1 in CAR_CHANGE_CHANCE chance of car changing
+	if (RA(1, CAR_CHANGE_CHANCE) % CAR_CHANGE_CHANCE == 0) // 1 in CAR_CHANGE_CHANCE chance of car changing it's attributes
 	{
 		object->rd_colour = CarColour(); // car behaviour is connected to it's colour so changing car colour changes car
 		if (x_separation > MIN_CAR_SEPARATION)
 			object->interval = frame + RA(1, x_separation - MIN_CAR_SEPARATION); // time interval between previous car disappearing and new one appearing
 	}
-	else
+	else // standard wrapping
 	{
 		object->interval = frame;
 		Show(object, 0, direction, road_colour);
 	}
 }
 
+// move car if sufficient time has passed since the last movement, check whether frog is traveling with the car and check for wrapping
 void MoveCar(object_t* object, object_t* frog, int frame, int road_color, int taxiing, int x_separation, int pts, leaderboard_t** leaderboard, int numof_leaderboard)
 {
 	int moveX = object->speed / abs(object->speed); // taking the direction data from speed
 	if (frame - object->interval >= abs(object->speed))
 	{
-		if ((moveX > 0 && object->x == COLS - BORDER - object->width) || (moveX < 0 && object->x == BORDER))
+		if ((moveX > 0 && object->x == COLS - BORDER - object->width) || (moveX < 0 && object->x == BORDER)) // if car reaches border (cases for right- and left-moving cars)
 		{
 			CarWrapping(object, frame, taxiing, x_separation, moveX, road_color, pts, leaderboard, numof_leaderboard);
 		}
@@ -761,6 +797,7 @@ void UpdateTimer(timer_t* T, window_t* status)
 
 // ---------------------------levels:---------------------------
 
+// initialise constant to this level enviroment such as road and obstacle layout
 void Level1ne(road_t*** roads, object_t*** obstacles, int* numof_roads, int* numof_obstacles, window_t* w, int col, int car_length, char car_char, int car_speed)
 {
 	*numof_roads = 2;
@@ -793,10 +830,10 @@ void Level1ne(road_t*** roads, object_t*** obstacles, int* numof_roads, int* num
 int CarSeparation(object_t** cars, int numof_cars, int i, int road_y)
 {
 	int iLane = XToLanes(cars[i]->y - road_y);
-	if (cars[i]->speed < 0)
+	if (cars[i]->speed < 0) // left-moving cars
 	{
 		int j = (i < numof_cars - 1 ? i + 1 : 0);
-		while (XToLanes(cars[j]->y - road_y) != iLane)
+		while (XToLanes(cars[j]->y - road_y) != iLane) // find nearest car on the same lane
 		{
 			j++;
 			if (j > numof_cars - 1) j = 0;
@@ -805,11 +842,11 @@ int CarSeparation(object_t** cars, int numof_cars, int i, int road_y)
 		if (i < j) return cars[j]->x - cars[i]->x - cars[i]->width; // substracted width could have been of any car since it's defined in config file to be the same for each
 		else return (cars[j]->x - BORDER + (COLS - BORDER) - cars[i]->x - cars[j]->width); // wrapping separation
 	}
-	else if (cars[i]->speed > 0)
+	else if (cars[i]->speed > 0) // right-moving cars
 	{
 		int j = (i > 0 ? i - 1 : numof_cars - 1);
 		// find neares car behind on the same lane
-		while (XToLanes(cars[j]->y - road_y) != iLane)
+		while (XToLanes(cars[j]->y - road_y) != iLane) // find nearest car on the same lane
 		{
 			j--;
 			if (j < 0) j = numof_cars - 1;
@@ -869,6 +906,7 @@ void RandomRoadSpeedChange(road_t* road, int car_speed)
 	}
 }
 
+// performing all actions related to cars and their attributes
 void CarsAction(WINDOW* w, object_t* frog, int frame_no, object_t** obstacles, road_t** roads, point_t* points, int ch, int* taxied, int numof_obstacles, int numof_roads, int car_speed, int* stopI, int* stopJ, int* taxI, int* taxJ, leaderboard_t** leaderboard, int numof_leaderboard)
 {
 	int currentLane; // variable to store lane information of current car
@@ -916,20 +954,33 @@ void MainLoop(window_t* status, object_t* frog, timer_t* timer, road_t** roads, 
 	EndScreen(status->window, 0, points->points_count, leaderboard, numof_leaderboard);
 }
 
-// ---------------------------file data reading:---------------------------
-void ReadConfig(FILE* config_file, char* frogger_appeal, int* car_length, char* car_char, int* car_speed, int* road_colour)
+// ---------------------------config file data reading:---------------------------
+void ReadConfig(char* frog_appeal, int* car_length, char* car_char, int* car_speed, int* road_colour)
 {
-	char road_col[4]; // string storing type of road coloring theme (EUR/USA - 3 character long therefore string is 4 character long making space for null terminator '\0')
-	fscanf(config_file, "Size and shape of the frog: %c\n", frogger_appeal);
-	fscanf(config_file, "Car length (default 3): %d\n", car_length);
-	fscanf(config_file, "Shape of a car (single character repeated as a block): %c\n", car_char);
-	fscanf(config_file, "Cars speed multiplier (default 3, recommended between 2 and 5): %d\n", car_speed);
-	fscanf(config_file, "Road theme (USA/EUR): %s\n", &road_col);
-	if (road_col != NULL)
+	FILE* config_file;
+	config_file = fopen("config.txt", "r");
+
+	// default values in case file read fails
+	*car_char = '#';
+	*car_length = 3;
+	*car_speed = 3;
+	*road_colour = ROAD_EU_COLOR;
+
+	if (config_file != NULL)
 	{
-		if (strcmp(road_col, "EUR") == 0) *road_colour = ROAD_EU_COLOR;
-		else if (strcmp(road_col, "USA") == 0) *road_colour = ROAD_US_COLOR;
-	}
+		char road_col[4]; // string storing type of road coloring theme (EUR/USA - 3 character long therefore string is 4 character long making space for null terminator '\0')
+		fscanf(config_file, "Size and shape of the frog: %c\n", frog_appeal);
+		fscanf(config_file, "Car length (default 3): %d\n", car_length);
+		fscanf(config_file, "Shape of a car (single character repeated as a block): %c\n", car_char);
+		fscanf(config_file, "Cars speed multiplier (default 3, recommended between 2 and 5): %d\n", car_speed);
+		fscanf(config_file, "Road theme (USA/EUR): %s\n", &road_col);
+		if (road_col != NULL)
+		{
+			if (strcmp(road_col, "EUR") == 0) *road_colour = ROAD_EU_COLOR;
+			else if (strcmp(road_col, "USA") == 0) *road_colour = ROAD_US_COLOR;
+		}
+		fclose(config_file);
+	}	
 }
 
 int main()
@@ -938,8 +989,6 @@ int main()
 	int numof_roads, numof_obstacles, numof_leaderboard;
 
 	leaderboard_t** leaderboard = ReadLeaderboard(&numof_leaderboard);
-
-	// TODO: leaderboard writing at the end of the program, adding name to the leaderboard mechanic (w/ sorting)
 
 	WINDOW* mainwin = Start();
 
@@ -954,19 +1003,8 @@ int main()
 	point_t* points = InitPoints();
 
 	// config file operations
-	FILE* config_file;
-	config_file = fopen("config.txt", "r");
-
-	// default values in case file read fails
-	char car_char = '#';
-	int car_length = 3;
-	int car_speed_multiplier = 3;
-	int road_color = ROAD_EU_COLOR;
-	
-	if (config_file != NULL)
-		ReadConfig(config_file, &frog->appearance[0][0], &car_length, &car_char, &car_speed_multiplier, &road_color);
-
-	fclose(config_file);
+	char car_char; int car_length, car_speed_multiplier, road_color; // variables to store config data
+	ReadConfig(&frog->appearance[0][0], &car_length, &car_char, &car_speed_multiplier, &road_color);
 
 	object_t** obstacles;
 	road_t** roads;
