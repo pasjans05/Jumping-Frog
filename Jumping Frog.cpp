@@ -53,6 +53,8 @@
 #define TRIPLE_LANE 3 // 10 rows wide
 
 #define MAX_POINTS_TIME 10 // points are calculated as: (MAX_POINTS_TIME * FROG_JUMP_TIME) / (Y_PROGRES_FRAME - LAST_Y_PROGRESS_FRAME) so the faster you progress the more points you get!
+#define MAX_LEADERBOARD_NAME_LENGTH 16 // maximum name length for names appearing on leaderboard
+#define MAX_LEADERBOARD_LENGTH (MAX_LEADERBOARD_NAME_LENGTH + 10) // maximum space that leaderboard can take width-wise - maximum name length + 10 characters reserved for score, position number and margin
 
 #define RA(min, max) ( (min) + rand() % ((max) - (min) + 1) ) // random number between min and max (inc)
 
@@ -99,11 +101,15 @@ typedef struct {
 	int points_count;
 } point_t;
 
+typedef struct {
+	int no;
+	char name[MAX_LEADERBOARD_NAME_LENGTH];
+	int points;
+} leaderboard_t;
+
 // basic calculation functions:
 int LanesToX(int lanes) { return lanes * 3 + 1; }
 int XToLanes(int x) { return (x - 1) / 3; }
-
-// ---------------------------window functions:---------------------------
 
 void PrintFrame(WINDOW* W)
 {
@@ -124,7 +130,120 @@ void PrintFrame(WINDOW* W)
 	mvwprintw(W, LINES - 1, BORDER + 1, "Stanislaw Kardas 203880");
 }
 
-void Welcome(WINDOW* win) // Welcome screen: press any key to continue
+// ---------------------------leaderboard (ranking) functions:---------------------------
+
+leaderboard_t** ReadLeaderboard(int* numof_leaderboard)
+{
+	FILE* ranking_file;
+	ranking_file = fopen("leaderboard.txt", "r");
+	if (ranking_file == NULL)
+	{
+		*numof_leaderboard = 0;
+		return NULL;
+	}
+	else
+	{
+		int i = 0; // iterator for while loop ranking file reading
+		leaderboard_t** ranking = (leaderboard_t**)malloc(sizeof(leaderboard_t*));
+		ranking[i] = (leaderboard_t*)malloc(sizeof(leaderboard_t));
+
+		while (fscanf(ranking_file, "%d. %s %d", &ranking[i]->no, &ranking[i]->name, &ranking[i]->points) == 3)
+		{
+			i++;
+			ranking = (leaderboard_t**)realloc(ranking, (i + 1) * sizeof(leaderboard_t*));
+			ranking[i] = (leaderboard_t*)malloc(sizeof(leaderboard_t));
+		}
+		fclose(ranking_file);
+		*numof_leaderboard = i;
+		return ranking;
+	}
+}
+
+void SaveLeaderboard(leaderboard_t** leaderboard, int numof_leaderboard)
+{
+	FILE* ranking_file;
+	ranking_file = fopen("leaderboard.txt", "w");
+	for (int i = 0; i < numof_leaderboard; i++)
+		fprintf(ranking_file, "%d. %s %d\n", leaderboard[i]->no, leaderboard[i]->name, leaderboard[i]->points);
+	fclose(ranking_file);
+}
+
+void AddToLeaderboard(WINDOW* w, leaderboard_t** leaderboard, int* numof_leaderboard, int points, int win)
+{
+	leaderboard_t* new_entry = (leaderboard_t*)malloc(sizeof(leaderboard_t));
+	new_entry->points = points;
+
+	// screen of entering a name
+	PrintFrame(w);
+	mvwprintw(w, 1, 1, "Your points: %d", points);
+	mvwprintw(w, 2, 1, "Please enter your name (up to %d characters) and confirm it with down arrow key:", MAX_LEADERBOARD_NAME_LENGTH - 1);
+
+	// name entering:
+	int ch, i;
+	for (i = 0; i < MAX_LEADERBOARD_NAME_LENGTH - 1; i++)
+	{
+		ch = wgetch(w);
+		if (ch == KEY_DOWN)
+			break;
+		else
+		{
+			new_entry->name[i] = ch;
+			mvwaddch(w, 3, i + 1, ch);
+		}
+	}
+	new_entry->name[i] = '\0';
+
+	// find the right place on the leaderboard and sort it:
+	*numof_leaderboard += 1;
+	if (*numof_leaderboard == 1)
+		leaderboard = (leaderboard_t**)malloc(*numof_leaderboard * sizeof(leaderboard_t*));
+	else
+		leaderboard = (leaderboard_t**)realloc(leaderboard, *numof_leaderboard * sizeof(leaderboard_t*));
+	leaderboard[*numof_leaderboard - 1] = (leaderboard_t*)malloc(sizeof(leaderboard_t));
+	leaderboard_t* temp = (leaderboard_t*)malloc(sizeof(leaderboard_t));
+	for (i = 0; i < *numof_leaderboard; i++)
+	{
+		if (i == *numof_leaderboard - 1)
+		{
+			leaderboard[i] = new_entry;
+			leaderboard[i]->no = i + 1;
+			break;
+		}
+		else if (new_entry->points > leaderboard[i]->points)
+		{
+			temp = leaderboard[i];
+			leaderboard[i] = new_entry;
+			leaderboard[i]->no = i + 1;
+			new_entry = temp;
+			for (int j = i + 1; j < *numof_leaderboard; j++)
+			{
+				temp = leaderboard[j];
+				leaderboard[j] = new_entry;
+				leaderboard[j]->no = j + 1;
+				new_entry = temp;
+			}
+			break;
+		}
+	}
+	SaveLeaderboard(leaderboard, *numof_leaderboard);
+}
+
+void PrintLeaderboard(WINDOW* win, leaderboard_t** leaderboard, int numof_leaderboard)
+{
+	if (numof_leaderboard)
+		mvwaddstr(win, BORDER, COLS - MAX_LEADERBOARD_LENGTH, "Leaderboard: ");
+	else
+		mvwaddstr(win, BORDER, COLS - MAX_LEADERBOARD_LENGTH, "No leaderboard yet.");
+
+	for (int i = 0; i < numof_leaderboard; i++)
+	{
+		mvwprintw(win, i + BORDER + 1, COLS - MAX_LEADERBOARD_LENGTH, "%d. %s %d", leaderboard[i]->no, leaderboard[i]->name, leaderboard[i]->points);
+	}
+}
+
+// ---------------------------window functions:---------------------------
+
+void Welcome(WINDOW* win, leaderboard_t** leaderboard, int numof_leaderboard) // Welcome screen: press any key to continue
 {
 	wattron(win, COLOR_PAIR(MAIN_COLOR));
 	PrintFrame(win);
@@ -141,12 +260,15 @@ void Welcome(WINDOW* win) // Welcome screen: press any key to continue
 	mvwaddstr(win, 6, 1, "You can't pass obstacles.");
 	wattron(win, COLOR_PAIR(MAIN_COLOR));
 	mvwaddstr(win, 8, 1, "Press any key to start...");
+
+	PrintLeaderboard(win, leaderboard, numof_leaderboard);
+
 	wgetch(win); // waiting here..
 	wclear(win); // clear (after next refresh)
 	wrefresh(win);
 }
 
-void EndScreen(WINDOW* w, int win, int pts) // End of the game screen: press any key to continue
+void EndScreen(WINDOW* w, int win, int pts, leaderboard_t** leaderboard, int numof_leaderboard) // End of the game screen: press any key to continue
 {
 	nodelay(w, FALSE);
 	wattron(w, COLOR_PAIR(MAIN_COLOR));
@@ -155,13 +277,36 @@ void EndScreen(WINDOW* w, int win, int pts) // End of the game screen: press any
 		mvwaddstr(w, 1, 1, "You won.");
 	else
 		mvwaddstr(w, 1, 1, "You lost.");
-	mvwaddstr(w, 3, 1, "Your time: "); // TODO: endscreen time
-	mvwaddstr(w, 4, 1, "Your points: "); // TODO: endscreen points (if ever implemented)
+	// TODO: endscreen time
+	// mvwaddstr(w, 3, 1, "Your time: "); 
+	mvwaddstr(w, 4, 1, "Your points: ");
 	mvwprintw(w, 4, 15, "%d", pts);
-	mvwaddstr(w, 5, 1, "Some sort of leaderboard perhaps.");
-	mvwaddstr(w, 6, 1, "I dont know what else should be on the endscreen.");
 	mvwaddstr(w, 8, 1, "Press any key to quit...");
-	wgetch(w); // waiting here..
+	PrintLeaderboard(w, leaderboard, numof_leaderboard);
+	if (win != -1) // if entry hasn't been added to the leaderboard yet
+	{
+		mvwaddstr(w, 5, 1, "Press 'l' to add your score to the leaderboard.");
+
+		int ch = wgetch(w);
+
+		if (ch == 'l')
+		{
+			AddToLeaderboard(w, leaderboard, &numof_leaderboard, pts, win);
+			EndScreen(w, -1, pts, ReadLeaderboard(&numof_leaderboard), numof_leaderboard); // -1 in win parameter make the function not ask about leaderboard addition
+		}
+		else
+		{
+			wclear(w); // clear (after next refresh)
+			wrefresh(w);
+
+			delwin(w);
+			endwin();
+			refresh();
+			exit(0);
+		}
+	}
+	wgetch(w); // wait here
+
 	wclear(w); // clear (after next refresh)
 	wrefresh(w);
 
@@ -265,7 +410,7 @@ void ShowNewStatus(window_t* W, timer_t* T, object_t* o, int pts)
 	ShowStatus(W, o, pts);
 }
 
-// ---------------------------OBJ+ FUNCTIONS:---------------------------
+// ---------------------------object_t and other structure-related functions:---------------------------
 
 void Print(object_t* object)
 {
@@ -550,7 +695,7 @@ void MoveFrog(object_t* object, int ch, unsigned int frame, object_t** obstacle,
 	}
 }
 
-void CarWrapping(object_t* object, int frame, int taxiing, int x_separation, int direction, int road_colour, int pts)
+void CarWrapping(object_t* object, int frame, int taxiing, int x_separation, int direction, int road_colour, int pts, leaderboard_t** leaderboard, int numof_leaderboard)
 {
 	PrintBlank(object);
 	if (direction > 0)
@@ -558,7 +703,7 @@ void CarWrapping(object_t* object, int frame, int taxiing, int x_separation, int
 	else
 		object->x = COLS - BORDER - object->width + 1;
 
-	if (taxiing) EndScreen(object->win->window, 0, pts);
+	if (taxiing) EndScreen(object->win->window, 0, pts, leaderboard, numof_leaderboard);
 	if (RA(1, CAR_CHANGE_CHANCE) % CAR_CHANGE_CHANCE == 0) // 1 in CAR_CHANGE_CHANCE chance of car changing
 	{
 		object->rd_colour = CarColour(); // car behaviour is connected to it's colour so changing car colour changes car
@@ -572,14 +717,14 @@ void CarWrapping(object_t* object, int frame, int taxiing, int x_separation, int
 	}
 }
 
-void MoveCar(object_t* object, object_t* frog, int frame, int road_color, int taxiing, int x_separation, int pts)
+void MoveCar(object_t* object, object_t* frog, int frame, int road_color, int taxiing, int x_separation, int pts, leaderboard_t** leaderboard, int numof_leaderboard)
 {
 	int moveX = object->speed / abs(object->speed); // taking the direction data from speed
 	if (frame - object->interval >= abs(object->speed))
 	{
 		if ((moveX > 0 && object->x == COLS - BORDER - object->width) || (moveX < 0 && object->x == BORDER))
 		{
-			CarWrapping(object, frame, taxiing, x_separation, moveX, road_color, pts);
+			CarWrapping(object, frame, taxiing, x_separation, moveX, road_color, pts, leaderboard, numof_leaderboard);
 		}
 		else
 		{
@@ -679,7 +824,7 @@ int CarSeparation(object_t** cars, int numof_cars, int i, int road_y)
 // ---------------------------main loop and related functions:---------------------------
 
 // sub-function of CarsAction to do operations related to collisions
-void CollisionAction(WINDOW* w, object_t* frog, road_t** roads, object_t** obstacles, point_t* points, int frame, int numof_obstacles, int ch, int* taxied, int* taxI, int* taxJ, int i, int j)
+void CollisionAction(WINDOW* w, object_t* frog, road_t** roads, object_t** obstacles, point_t* points, int frame, int numof_obstacles, int ch, int* taxied, int* taxI, int* taxJ, int i, int j, leaderboard_t** leaderboard, int numof_leaderboard)
 {
 	if (roads[i]->cars[j]->rd_colour == CAR_TAXI_COLOR)
 	{
@@ -698,7 +843,7 @@ void CollisionAction(WINDOW* w, object_t* frog, road_t** roads, object_t** obsta
 		}
 	}
 	else
-		EndScreen(w, 0, points->points_count);
+		EndScreen(w, 0, points->points_count, leaderboard, numof_leaderboard);
 }
 
 // sub-function of CarsAction to do operations related to semi-enemy car (one that stops when near a car)
@@ -724,7 +869,7 @@ void RandomRoadSpeedChange(road_t* road, int car_speed)
 	}
 }
 
-void CarsAction(WINDOW* w, object_t* frog, int frame_no, object_t** obstacles, road_t** roads, point_t* points, int ch, int* taxied, int numof_obstacles, int numof_roads, int car_speed, int* stopI, int* stopJ, int* taxI, int* taxJ)
+void CarsAction(WINDOW* w, object_t* frog, int frame_no, object_t** obstacles, road_t** roads, point_t* points, int ch, int* taxied, int numof_obstacles, int numof_roads, int car_speed, int* stopI, int* stopJ, int* taxI, int* taxJ, leaderboard_t** leaderboard, int numof_leaderboard)
 {
 	int currentLane; // variable to store lane information of current car
 	for (int i = 0; i < numof_roads; i++)
@@ -733,10 +878,10 @@ void CarsAction(WINDOW* w, object_t* frog, int frame_no, object_t** obstacles, r
 		{
 			currentLane = XToLanes(roads[i]->cars[j]->y - roads[i]->y);
 			if (roads[i]->stopped[currentLane] == 0) // moves car if current lane isn't stopped
-				MoveCar(roads[i]->cars[j], frog, frame_no, roads[0]->colour, (*taxied && *taxI == i && *taxJ == j ? *taxied : 0), CarSeparation(roads[i]->cars, roads[i]->numof_cars, j, roads[i]->y), points->points_count);
+				MoveCar(roads[i]->cars[j], frog, frame_no, roads[0]->colour, (*taxied && *taxI == i && *taxJ == j ? *taxied : 0), CarSeparation(roads[i]->cars, roads[i]->numof_cars, j, roads[i]->y), points->points_count, leaderboard, numof_leaderboard);
 			if (Collision(frog, roads[i]->cars[j], 0, 0))
 			{
-				CollisionAction(w, frog, roads, obstacles, points, frame_no, numof_obstacles, ch, taxied, taxI, taxJ, i, j);
+				CollisionAction(w, frog, roads, obstacles, points, frame_no, numof_obstacles, ch, taxied, taxI, taxJ, i, j, leaderboard, numof_leaderboard);
 			}
 			else if (roads[i]->cars[j]->rd_colour == CAR_COLOR2) // semi-enemy car (magenta) operations (semi-enemy cars stop their lane when within CAR_STOP_DISTANCE of the frog)
 			{
@@ -748,7 +893,7 @@ void CarsAction(WINDOW* w, object_t* frog, int frame_no, object_t** obstacles, r
 	}
 }
 
-void MainLoop(window_t* status, object_t* frog, timer_t* timer, road_t** roads, int numof_roads, object_t** obstacles, int numof_obstacles, int car_speed, point_t* points)
+void MainLoop(window_t* status, object_t* frog, timer_t* timer, road_t** roads, int numof_roads, object_t** obstacles, int numof_obstacles, int car_speed, point_t* points, leaderboard_t** leaderboard, int numof_leaderboard)
 {
 	int ch, pts = 0;
 	int taxI, taxJ, taxied = 0; // taxi identification (i, j) indicating which vechicle is frog taxing with bool variable to check whether frog is currently traveling by taxi
@@ -759,19 +904,19 @@ void MainLoop(window_t* status, object_t* frog, timer_t* timer, road_t** roads, 
 		else if (!taxied)
 		{
 			MoveFrog(frog, ch, timer->frame_no, obstacles, numof_obstacles, roads[0]->colour, points);
-			if (frog->y == FINISH) EndScreen(status->window, 1, points->points_count);
+			if (frog->y == FINISH) EndScreen(status->window, 1, points->points_count, leaderboard, numof_leaderboard);
 		}
 		// all car-related mechanics and operations:
-		CarsAction(status->window, frog, timer->frame_no, obstacles, roads, points, ch, &taxied, numof_obstacles, numof_roads, car_speed, &stopI, &stopJ, &taxI, &taxJ);
+		CarsAction(status->window, frog, timer->frame_no, obstacles, roads, points, ch, &taxied, numof_obstacles, numof_roads, car_speed, &stopI, &stopJ, &taxI, &taxJ, leaderboard, numof_leaderboard);
 
 		ShowStatus(status, frog, points->points_count);
 		flushinp(); // clear input buffer (avoiding multiple key pressed)
 		UpdateTimer(timer, status);// update timer & sleep
 	}
-	EndScreen(status->window, 0, points->points_count);
+	EndScreen(status->window, 0, points->points_count, leaderboard, numof_leaderboard);
 }
 
-// ---------------------------config:---------------------------
+// ---------------------------file data reading:---------------------------
 void ReadConfig(FILE* config_file, char* frogger_appeal, int* car_length, char* car_char, int* car_speed, int* road_colour)
 {
 	char road_col[4]; // string storing type of road coloring theme (EUR/USA - 3 character long therefore string is 4 character long making space for null terminator '\0')
@@ -790,11 +935,15 @@ void ReadConfig(FILE* config_file, char* frogger_appeal, int* car_length, char* 
 int main()
 {
 	srand(time(NULL)); // new seed for each road definition
-	int numof_roads, numof_obstacles;
+	int numof_roads, numof_obstacles, numof_leaderboard;
+
+	leaderboard_t** leaderboard = ReadLeaderboard(&numof_leaderboard);
+
+	// TODO: leaderboard writing at the end of the program, adding name to the leaderboard mechanic (w/ sorting)
 
 	WINDOW* mainwin = Start();
 
-	Welcome(mainwin);
+	Welcome(mainwin, leaderboard, numof_leaderboard);
 
 	window_t* playwin = Init(mainwin, LINES, COLS, 0, 0, MAIN_COLOR, DELAY_OFF);
 
@@ -834,5 +983,5 @@ int main()
 	ShowNewStatus(playwin, timer, frog, 0);
 	Show(frog, 0, 0, roads[0]->colour);
 
-	MainLoop(playwin, frog, timer, roads, numof_roads, obstacles, numof_obstacles, car_speed_multiplier, points);
+	MainLoop(playwin, frog, timer, roads, numof_roads, obstacles, numof_obstacles, car_speed_multiplier, points, leaderboard, numof_leaderboard);
 }
