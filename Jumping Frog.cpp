@@ -646,13 +646,83 @@ int CarSeparation(object_t** cars, int numof_cars, int i, int road_y)
 	}
 }
 
-// ---------------------------main loop:---------------------------
+// ---------------------------main loop and related functions:---------------------------
+
+// sub-function of CarsAction to do operations related to collisions
+void CollisionAction(WINDOW* w, object_t* frog, road_t** roads, object_t** obstacles, int numof_obstacles, int ch, int* taxied, int* taxI, int* taxJ, int i, int j)
+{
+	if (roads[i]->cars[j]->rd_colour == CAR_TAXI_COLOR)
+	{
+		if (!*taxied && ch == 'f')
+		{
+			*taxied = 1; // indicate that frog is currently traveling by taxi
+			*taxI = i; *taxJ = j; // indicate which taxi is frog currently traveling by
+		}
+		else if (*taxied)
+		{
+			if (ch == 'f')
+			{
+				ObstacleCheck(obstacles, numof_obstacles, frog, -1, 0, roads[0]->colour); // moves frog one space up
+				*taxied = 0;
+			}
+		}
+	}
+	else
+		EndScreen(w);
+}
+
+// sub-function of CarsAction to do operations related to semi-enemy car (one that stops when near a car)
+void SemiEnemyCarAction(object_t* frog, road_t** roads, int currentLane, int* stopI, int* stopJ, int i, int j)
+{
+	int dir = roads[i]->cars[j]->speed / abs(roads[i]->cars[j]->speed);
+	if (!roads[i]->stopped[currentLane] && Collision(frog, roads[i]->cars[j], 0, -CAR_STOP_DISTANCE * dir))
+	{
+		roads[i]->stopped[currentLane] = 1; // assign to the lane of the car stopped status
+		*stopI = i; *stopJ = j;
+	}
+	else if (roads[i]->stopped[currentLane] && !Collision(frog, roads[*stopI]->cars[*stopJ], 0, -CAR_STOP_DISTANCE * dir))
+		roads[i]->stopped[currentLane] = 0; // 'reopen' the lane
+}
+
+// function that randomly changes speed of 1 in a SPEED_CHANGE_CHANCE'th road
+void RandomRoadSpeedChange(road_t* road, int car_speed)
+{
+	if (RA(1, SPEED_CHANGE_CHANCE) % SPEED_CHANGE_CHANCE == 0)
+	{
+		road->speed = CarSpeed(car_speed * (road->speed / abs(road->speed)));
+		for (int j = 0; j < road->numof_cars; j++) road->cars[j]->speed = road->speed;
+	}
+}
+
+void CarsAction(WINDOW* w, object_t* frog, int frame_no, object_t** obstacles, road_t** roads, int ch, int* taxied, int numof_obstacles, int numof_roads, int car_speed, int* stopI, int* stopJ, int* taxI, int* taxJ)
+{
+	int currentLane; // variable to store lane information of current car
+	for (int i = 0; i < numof_roads; i++)
+	{
+		for (int j = 0; j < roads[i]->numof_cars; j++)
+		{
+			currentLane = XToLanes(roads[i]->cars[j]->y - roads[i]->y);
+			if (roads[i]->stopped[currentLane] == 0) // moves car if current lane isn't stopped
+				MoveCar(roads[i]->cars[j], frog, frame_no, roads[0]->colour, (*taxied && *taxI == i && *taxJ == j ? *taxied : 0), CarSeparation(roads[i]->cars, roads[i]->numof_cars, j, roads[i]->y));
+			if (Collision(frog, roads[i]->cars[j], 0, 0))
+			{
+				CollisionAction(w, frog, roads, obstacles, numof_obstacles, ch, taxied, taxI, taxJ, i, j);
+			}
+			else if (roads[i]->cars[j]->rd_colour == CAR_COLOR2) // semi-enemy car (magenta) operations (semi-enemy cars stop their lane when within CAR_STOP_DISTANCE of the frog)
+			{
+				SemiEnemyCarAction(frog, roads, currentLane, stopI, stopJ, i, j);
+			}
+			Show(frog, 0, 0, roads[i]->colour); // refresh frog so it doesn't disappear under another asset
+		}
+		RandomRoadSpeedChange(roads[i], car_speed);
+	}
+}
 
 void MainLoop(window_t* status, object_t* frog, timer_t* timer, road_t** roads, int numof_roads, object_t** obstacles, int numof_obstacles, int car_speed)
 {
 	int ch, pts = 0;
 	int taxI, taxJ, taxied = 0; // taxi identification (i, j) indicating which vechicle is frog taxing with bool variable to check whether frog is currently traveling by taxi
-	int stopI, stopJ, currentLane; // variable to store lane information of current car
+	int stopI, stopJ; // variable to store lane information of current car
 	while ((ch = wgetch(status->window)) != QUIT) // NON-BLOCKING! (nodelay=TRUE)
 	{
 		if (ch == ERR) ch = NOKEY; // ERR is ncurses predefined
@@ -661,54 +731,9 @@ void MainLoop(window_t* status, object_t* frog, timer_t* timer, road_t** roads, 
 			MoveFrog(frog, ch, timer->frame_no, obstacles, numof_obstacles, roads[0]->colour);
 			if (frog->y == FINISH) EndScreen(status->window);
 		}
-		// movecar callout with collision checker
-		for (int i = 0; i < numof_roads; i++)
-		{
-			for (int j = 0; j < roads[i]->numof_cars; j++)
-			{
-				currentLane = XToLanes(roads[i]->cars[j]->y - roads[i]->y);
-				if(roads[i]->stopped[currentLane] == 0) // moves car if current lane isn't stopped
-					MoveCar(roads[i]->cars[j], frog, timer->frame_no, roads[0]->colour, (taxied && taxI == i && taxJ == j ? taxied : 0), CarSeparation(roads[i]->cars, roads[i]->numof_cars, j, roads[i]->y)); // TODO: NOWWWWW: function that reads separation somehow
-				if (Collision(frog, roads[i]->cars[j], 0, 0))
-				{
-					if (roads[i]->cars[j]->rd_colour == CAR_TAXI_COLOR)
-					{
-						if (!taxied && ch == 'f')
-						{
-							taxied = 1; // indicate that frog is currently traveling by taxi
-							taxI = i; taxJ = j; // indicate which taxi is frog currently traveling by
-						}
-						else if (taxied)
-						{
-							if (ch == 'f')
-							{
-								ObstacleCheck(obstacles, numof_obstacles, frog, -1, 0, roads[0]->colour); // moves frog one space up
-								taxied = 0;
-							}
-						}
-					}
-					else
-						EndScreen(status->window);
-				}
-				else if (roads[i]->cars[j]->rd_colour == CAR_COLOR2) // semi-enemy car (magenta) operations (semi-enemy cars stop their lane when within CAR_STOP_DISTANCE of the frog)
-				{
-					int dir = roads[i]->cars[j]->speed / abs(roads[i]->cars[j]->speed);
-					if (!roads[i]->stopped[currentLane] && Collision(frog, roads[i]->cars[j], 0, -CAR_STOP_DISTANCE*dir))
-					{
-						roads[i]->stopped[currentLane] = 1; // assign to the lane of the car stopped status
-						stopI = i; stopJ = j;
-					}
-					else if (roads[i]->stopped[currentLane] && !Collision(frog, roads[stopI]->cars[stopJ], 0, -CAR_STOP_DISTANCE*dir))
-						roads[i]->stopped[currentLane] = 0; // 'reopen' the lane
-				}
-				Show(frog, 0, 0, roads[i]->colour); // refresh frog so it doesn't disappear under another asset
-			}
-			if (RA(1, SPEED_CHANGE_CHANCE) % SPEED_CHANGE_CHANCE == 0)
-			{
-				roads[i]->speed = CarSpeed(car_speed*(roads[i]->speed/abs(roads[i]->speed)));
-				for (int j = 0; j < roads[i]->numof_cars; j++) roads[i]->cars[j]->speed = roads[i]->speed;
-			}
-		}
+		// all car-related mechanics and operations:
+		CarsAction(status->window, frog, timer->frame_no, obstacles, roads, ch, &taxied, numof_obstacles, numof_roads, car_speed, &stopI, &stopJ, &taxI, &taxJ);
+
 		ShowStatus(status, frog);
 		flushinp(); // clear input buffer (avoiding multiple key pressed)
 		UpdateTimer(timer, status);// update timer & sleep
