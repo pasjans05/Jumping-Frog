@@ -617,17 +617,33 @@ void Level1ne(road_t*** roads, object_t*** obstacles, int* numof_roads, int* num
 // find the separation behind car number i from array of numof_cars cars
 int CarSeparation(object_t** cars, int numof_cars, int i, int road_y)
 {
-	int j = (i > 0 ? i - 1 : numof_cars - 1), iLane = XToLanes(cars[i]->y - road_y);
-	// find neares car behind on the same lane
-	while (XToLanes(cars[j]->y - road_y) != iLane)
+	int iLane = XToLanes(cars[i]->y - road_y);
+	if (cars[i]->speed < 0)
 	{
-		j--;
-		if (j < 0) j = numof_cars - 1;
-		else if (j == i) return COLS - 2 * BORDER - cars[i]->width; // only this car on the lane
+		int j = (i < numof_cars - 1 ? i + 1 : 0);
+		while (XToLanes(cars[j]->y - road_y) != iLane)
+		{
+			j++;
+			if (j > numof_cars - 1) j = 0;
+			else if (j == i) return COLS - 2 * BORDER - cars[i]->width;
+		}
+		if (i < j) return cars[j]->x - cars[i]->x - cars[i]->width; // substracted width could have been of any car since it's defined in config file to be the same for each
+		else return (cars[j]->x - BORDER + (COLS - BORDER) - cars[i]->x - cars[j]->width); // wrapping separation
 	}
-	// calculate the separation
-	if (i > j) return cars[i]->x - cars[j]->x - cars[i]->width; // substracted width could have been of any car since it's defined in config file to be the same for each
-	else return (cars[i] - BORDER + (COLS - BORDER) - cars[numof_cars - 1] - cars[i]->width); // wrapping separation
+	else if (cars[i]->speed > 0)
+	{
+		int j = (i > 0 ? i - 1 : numof_cars - 1);
+		// find neares car behind on the same lane
+		while (XToLanes(cars[j]->y - road_y) != iLane)
+		{
+			j--;
+			if (j < 0) j = numof_cars - 1;
+			else if (j == i) return COLS - 2 * BORDER - cars[i]->width; // only this car on the lane
+		}
+		// calculate the separation
+		if (i > j) return cars[i]->x - cars[j]->x - cars[i]->width; // substracted width could have been of any car since it's defined in config file to be the same for each
+		else return (cars[i]->x - BORDER + (COLS - BORDER) - cars[j]->x - cars[i]->width); // wrapping separation
+	}
 }
 
 // ---------------------------main loop:---------------------------
