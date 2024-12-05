@@ -32,7 +32,7 @@
 #define NOKEY		' '
 
 //time related definitions:
-#define FRAME_TIME	10 // 25 ms (base frame time) (time interval between frames)
+#define FRAME_TIME	10 // ms (base frame time) (time interval between frames)
 #define FROG_JUMP_TIME 15
 
 // general definitions:
@@ -51,6 +51,8 @@
 #define SINGLE_LANE 1 // 4 rows wide
 #define DOUBLE_LANE 2 // 7 rows wide
 #define TRIPLE_LANE 3 // 10 rows wide
+
+#define MAX_POINTS_TIME 10 // points are calculated as: (MAX_POINTS_TIME * FROG_JUMP_TIME) / (Y_PROGRES_FRAME - LAST_Y_PROGRESS_FRAME) so the faster you progress the more points you get!
 
 #define RA(min, max) ( (min) + rand() % ((max) - (min) + 1) ) // random number between min and max (inc)
 
@@ -90,6 +92,12 @@ typedef struct {
 	unsigned int frame_time;
 	int frame_no;
 } timer_t;
+
+typedef struct {
+	int last_y_progres_frame;
+	int y_progres;
+	int points_count;
+} point_t;
 
 // basic calculation functions:
 int LanesToX(int lanes) { return lanes * 3 + 1; }
@@ -138,23 +146,26 @@ void Welcome(WINDOW* win) // Welcome screen: press any key to continue
 	wrefresh(win);
 }
 
-void EndScreen(WINDOW* win) // End of the game screen: press any key to continue
+void EndScreen(WINDOW* w, int win, int pts) // End of the game screen: press any key to continue
 {
-	nodelay(win, FALSE);
-	wattron(win, COLOR_PAIR(MAIN_COLOR));
-	PrintFrame(win);
-	mvwaddstr(win, 1, 1, "The Game has ended.");
-	mvwaddstr(win, 2, 1, "You either won or lost, there is no way to tell at the moment.");
-	mvwaddstr(win, 3, 1, "Your time: "); // TODO: endscreen time
-	mvwaddstr(win, 4, 1, "Your points: "); // TODO: endscreen points (if ever implemented)
-	mvwaddstr(win, 5, 1, "Some sort of leaderboard perhaps.");
-	mvwaddstr(win, 6, 1, "I dont know what else should be on the endscreen.");
-	mvwaddstr(win, 8, 1, "Press any key to quit...");
-	wgetch(win); // waiting here..
-	wclear(win); // clear (after next refresh)
-	wrefresh(win);
+	nodelay(w, FALSE);
+	wattron(w, COLOR_PAIR(MAIN_COLOR));
+	PrintFrame(w);
+	if (win)
+		mvwaddstr(w, 1, 1, "You won.");
+	else
+		mvwaddstr(w, 1, 1, "You lost.");
+	mvwaddstr(w, 3, 1, "Your time: "); // TODO: endscreen time
+	mvwaddstr(w, 4, 1, "Your points: "); // TODO: endscreen points (if ever implemented)
+	mvwprintw(w, 4, 15, "%d", pts);
+	mvwaddstr(w, 5, 1, "Some sort of leaderboard perhaps.");
+	mvwaddstr(w, 6, 1, "I dont know what else should be on the endscreen.");
+	mvwaddstr(w, 8, 1, "Press any key to quit...");
+	wgetch(w); // waiting here..
+	wclear(w); // clear (after next refresh)
+	wrefresh(w);
 
-	delwin(win);
+	delwin(w);
 	endwin();
 	refresh();
 	exit(0);
@@ -228,12 +239,11 @@ int CheckRoad(int y, int x)
 
 // ---------------------------status functions:---------------------------
 
-void ShowStatus(window_t* W, object_t* o)
+void ShowStatus(window_t* W, object_t* o, int pts)
 {
 	wattron(W->window, COLOR_PAIR(MAIN_COLOR));
 	mvwprintw(W->window, 0, 45, "x: %d  y: %d  ", o->x, o->y);
-	// TODO: points system
-	// mvwprintw(W->window, 1, 25, "%d", pts);
+	mvwprintw(W->window, 0, 25, "%d", pts);
 	wrefresh(W->window);
 }
 
@@ -248,11 +258,11 @@ void ShowNewStatus(window_t* W, timer_t* T, object_t* o, int pts)
 {
 	wattron(W->window, COLOR_PAIR(MAIN_COLOR));
 	mvwprintw(W->window, 0, BORDER+1, "Time: ");
-	// mvwprintw(W->window, 0, 17, "Points: ");
+	mvwprintw(W->window, 0, 17, "Points: ");
 	ShowTimer(W, T->frame_time*T->frame_no);
 	mvwprintw(W->window, 0, 35, "Position: ");
 	mvwprintw(W->window, 0, 78, "Jumping-Frog-Game");
-	ShowStatus(W, o);
+	ShowStatus(W, o, pts);
 }
 
 // ---------------------------OBJ+ FUNCTIONS:---------------------------
@@ -386,7 +396,7 @@ object_t* InitFrog(window_t* w, int col, int roadcol) // frog initialisation; no
 
 int CarColour()
 {
-	switch RA(0, 3) // TODO: increase chances of red car (simoutanouesly decrease chances of other cars)
+	switch RA(0, 3)
 	{
 	case 0: case 1:
 		return CAR_COLOR1;
@@ -452,7 +462,7 @@ road_t* InitRoad(window_t* w, int posY, int lanes, int col, int car_lngth, char 
 	road->win = w;
 	road->y = posY;
 	road->width = LanesToX(lanes);
-	road->speed = CarSpeed(car_speed); // TODO: (optional) make speed an array so that each lane has a separate speed; OR/AND make one lane go in the other direction
+	road->speed = CarSpeed(car_speed); // TODO: (optional) make speed an array so that each lane has a separate speed
 	road->stopped = (int*)malloc(lanes * sizeof(int));
 	for (int i = 0; i < lanes; i++) road->stopped[i] = 0;
 	
@@ -485,6 +495,21 @@ object_t* InitObstacle(window_t* w, int posY, int posX, int col, int width, int 
 	return object;
 }
 
+point_t* InitPoints()
+{
+	point_t* points = (point_t*)malloc(sizeof(point_t));
+	points->last_y_progres_frame = 0;
+	points->y_progres = LINES - BORDER;
+	points->points_count = 0;
+	return points;
+}
+
+int CalculatePoints(int frame_delta)
+{
+	int points = (MAX_POINTS_TIME * FROG_JUMP_TIME) / (frame_delta);
+	return (points > 0 ? points : 1);
+}
+
 // function to check whether object 1 is within (deltaY, deltaX) of object 2 (doesn't work diagonally i think), for direct collisions deltaX,Y = 0
 int Collision(object_t* ob1, object_t* ob2, int deltaY, int deltaX)
 {
@@ -493,34 +518,39 @@ int Collision(object_t* ob1, object_t* ob2, int deltaY, int deltaX)
 	return 0;
 }
 
-// check for collision with any of the obstacles and if there are none move the object
-int ObstacleCheck(object_t** obstacles, int numof_obstacles, object_t* object, int moveY, int moveX, int road_color)
+// check for collision with any of the obstacles and if there are none move the object; also calculates points
+int ObstacleCheck(object_t** obstacles, int numof_obstacles, object_t* object, int moveY, int moveX, int road_color, point_t* points, int frame)
 {
 	for (int i = 0; i < numof_obstacles; i++)
 	{
 		if (Collision(object, obstacles[i], moveY, moveX)) return 1;
 	}
-	
+	if (object->y + moveY < points->y_progres)
+	{
+		points->points_count += CalculatePoints(frame - points->last_y_progres_frame);
+		points->last_y_progres_frame = frame;
+		points->y_progres = object->y + moveY;
+	}
 	Show(object, moveY, moveX, road_color);
 
 	return 0;
 }
 
-void MoveFrog(object_t* object, int ch, unsigned int frame, object_t** obstacle, int numof_obstacles, int road_color)
+void MoveFrog(object_t* object, int ch, unsigned int frame, object_t** obstacle, int numof_obstacles, int road_color, point_t* points)
 {
 	if (frame - object->interval >= object->speed)
 	{
 		object->interval = frame;
 		switch (ch) {
-		case KEY_UP: ObstacleCheck(obstacle, numof_obstacles, object, -1, 0, road_color); break;
-		case KEY_DOWN: ObstacleCheck(obstacle, numof_obstacles, object, 1, 0, road_color); break;
-		case KEY_LEFT: ObstacleCheck(obstacle, numof_obstacles, object, 0, -1, road_color); break;
-		case KEY_RIGHT: ObstacleCheck(obstacle, numof_obstacles, object, 0, 1, road_color); break;
+		case KEY_UP: ObstacleCheck(obstacle, numof_obstacles, object, -1, 0, road_color, points, frame); break;
+		case KEY_DOWN: ObstacleCheck(obstacle, numof_obstacles, object, 1, 0, road_color, points, frame); break;
+		case KEY_LEFT: ObstacleCheck(obstacle, numof_obstacles, object, 0, -1, road_color, points, frame); break;
+		case KEY_RIGHT: ObstacleCheck(obstacle, numof_obstacles, object, 0, 1, road_color, points, frame); break;
 		}
 	}
 }
 
-void CarWrapping(object_t* object, int frame, int taxiing, int x_separation, int direction, int road_colour)
+void CarWrapping(object_t* object, int frame, int taxiing, int x_separation, int direction, int road_colour, int pts)
 {
 	PrintBlank(object);
 	if (direction > 0)
@@ -528,7 +558,7 @@ void CarWrapping(object_t* object, int frame, int taxiing, int x_separation, int
 	else
 		object->x = COLS - BORDER - object->width + 1;
 
-	if (taxiing) EndScreen(object->win->window);
+	if (taxiing) EndScreen(object->win->window, 0, pts);
 	if (RA(1, CAR_CHANGE_CHANCE) % CAR_CHANGE_CHANCE == 0) // 1 in CAR_CHANGE_CHANCE chance of car changing
 	{
 		object->rd_colour = CarColour(); // car behaviour is connected to it's colour so changing car colour changes car
@@ -542,14 +572,14 @@ void CarWrapping(object_t* object, int frame, int taxiing, int x_separation, int
 	}
 }
 
-void MoveCar(object_t* object, object_t* frog, int frame, int road_color, int taxiing, int x_separation)
+void MoveCar(object_t* object, object_t* frog, int frame, int road_color, int taxiing, int x_separation, int pts)
 {
 	int moveX = object->speed / abs(object->speed); // taking the direction data from speed
 	if (frame - object->interval >= abs(object->speed))
 	{
 		if ((moveX > 0 && object->x == COLS - BORDER - object->width) || (moveX < 0 && object->x == BORDER))
 		{
-			CarWrapping(object, frame, taxiing, x_separation, moveX, road_color);
+			CarWrapping(object, frame, taxiing, x_separation, moveX, road_color, pts);
 		}
 		else
 		{
@@ -649,7 +679,7 @@ int CarSeparation(object_t** cars, int numof_cars, int i, int road_y)
 // ---------------------------main loop and related functions:---------------------------
 
 // sub-function of CarsAction to do operations related to collisions
-void CollisionAction(WINDOW* w, object_t* frog, road_t** roads, object_t** obstacles, int numof_obstacles, int ch, int* taxied, int* taxI, int* taxJ, int i, int j)
+void CollisionAction(WINDOW* w, object_t* frog, road_t** roads, object_t** obstacles, point_t* points, int frame, int numof_obstacles, int ch, int* taxied, int* taxI, int* taxJ, int i, int j)
 {
 	if (roads[i]->cars[j]->rd_colour == CAR_TAXI_COLOR)
 	{
@@ -662,13 +692,13 @@ void CollisionAction(WINDOW* w, object_t* frog, road_t** roads, object_t** obsta
 		{
 			if (ch == 'f')
 			{
-				ObstacleCheck(obstacles, numof_obstacles, frog, -1, 0, roads[0]->colour); // moves frog one space up
+				ObstacleCheck(obstacles, numof_obstacles, frog, -1, 0, roads[0]->colour, points, frame); // moves frog one space up
 				*taxied = 0;
 			}
 		}
 	}
 	else
-		EndScreen(w);
+		EndScreen(w, 0, points->points_count);
 }
 
 // sub-function of CarsAction to do operations related to semi-enemy car (one that stops when near a car)
@@ -694,7 +724,7 @@ void RandomRoadSpeedChange(road_t* road, int car_speed)
 	}
 }
 
-void CarsAction(WINDOW* w, object_t* frog, int frame_no, object_t** obstacles, road_t** roads, int ch, int* taxied, int numof_obstacles, int numof_roads, int car_speed, int* stopI, int* stopJ, int* taxI, int* taxJ)
+void CarsAction(WINDOW* w, object_t* frog, int frame_no, object_t** obstacles, road_t** roads, point_t* points, int ch, int* taxied, int numof_obstacles, int numof_roads, int car_speed, int* stopI, int* stopJ, int* taxI, int* taxJ)
 {
 	int currentLane; // variable to store lane information of current car
 	for (int i = 0; i < numof_roads; i++)
@@ -703,10 +733,10 @@ void CarsAction(WINDOW* w, object_t* frog, int frame_no, object_t** obstacles, r
 		{
 			currentLane = XToLanes(roads[i]->cars[j]->y - roads[i]->y);
 			if (roads[i]->stopped[currentLane] == 0) // moves car if current lane isn't stopped
-				MoveCar(roads[i]->cars[j], frog, frame_no, roads[0]->colour, (*taxied && *taxI == i && *taxJ == j ? *taxied : 0), CarSeparation(roads[i]->cars, roads[i]->numof_cars, j, roads[i]->y));
+				MoveCar(roads[i]->cars[j], frog, frame_no, roads[0]->colour, (*taxied && *taxI == i && *taxJ == j ? *taxied : 0), CarSeparation(roads[i]->cars, roads[i]->numof_cars, j, roads[i]->y), points->points_count);
 			if (Collision(frog, roads[i]->cars[j], 0, 0))
 			{
-				CollisionAction(w, frog, roads, obstacles, numof_obstacles, ch, taxied, taxI, taxJ, i, j);
+				CollisionAction(w, frog, roads, obstacles, points, frame_no, numof_obstacles, ch, taxied, taxI, taxJ, i, j);
 			}
 			else if (roads[i]->cars[j]->rd_colour == CAR_COLOR2) // semi-enemy car (magenta) operations (semi-enemy cars stop their lane when within CAR_STOP_DISTANCE of the frog)
 			{
@@ -718,7 +748,7 @@ void CarsAction(WINDOW* w, object_t* frog, int frame_no, object_t** obstacles, r
 	}
 }
 
-void MainLoop(window_t* status, object_t* frog, timer_t* timer, road_t** roads, int numof_roads, object_t** obstacles, int numof_obstacles, int car_speed)
+void MainLoop(window_t* status, object_t* frog, timer_t* timer, road_t** roads, int numof_roads, object_t** obstacles, int numof_obstacles, int car_speed, point_t* points)
 {
 	int ch, pts = 0;
 	int taxI, taxJ, taxied = 0; // taxi identification (i, j) indicating which vechicle is frog taxing with bool variable to check whether frog is currently traveling by taxi
@@ -728,17 +758,17 @@ void MainLoop(window_t* status, object_t* frog, timer_t* timer, road_t** roads, 
 		if (ch == ERR) ch = NOKEY; // ERR is ncurses predefined
 		else if (!taxied)
 		{
-			MoveFrog(frog, ch, timer->frame_no, obstacles, numof_obstacles, roads[0]->colour);
-			if (frog->y == FINISH) EndScreen(status->window);
+			MoveFrog(frog, ch, timer->frame_no, obstacles, numof_obstacles, roads[0]->colour, points);
+			if (frog->y == FINISH) EndScreen(status->window, 1, points->points_count);
 		}
 		// all car-related mechanics and operations:
-		CarsAction(status->window, frog, timer->frame_no, obstacles, roads, ch, &taxied, numof_obstacles, numof_roads, car_speed, &stopI, &stopJ, &taxI, &taxJ);
+		CarsAction(status->window, frog, timer->frame_no, obstacles, roads, points, ch, &taxied, numof_obstacles, numof_roads, car_speed, &stopI, &stopJ, &taxI, &taxJ);
 
-		ShowStatus(status, frog);
+		ShowStatus(status, frog, points->points_count);
 		flushinp(); // clear input buffer (avoiding multiple key pressed)
 		UpdateTimer(timer, status);// update timer & sleep
 	}
-	EndScreen(status->window);
+	EndScreen(status->window, 0, points->points_count);
 }
 
 // ---------------------------config:---------------------------
@@ -772,6 +802,8 @@ int main()
 
 	object_t* frog = InitFrog(playwin, FROG_COLOR, FROG_ROAD_COLOR);
 
+	point_t* points = InitPoints();
+
 	// config file operations
 	FILE* config_file;
 	config_file = fopen("config.txt", "r");
@@ -802,5 +834,5 @@ int main()
 	ShowNewStatus(playwin, timer, frog, 0);
 	Show(frog, 0, 0, roads[0]->colour);
 
-	MainLoop(playwin, frog, timer, roads, numof_roads, obstacles, numof_obstacles, car_speed_multiplier);
+	MainLoop(playwin, frog, timer, roads, numof_roads, obstacles, numof_obstacles, car_speed_multiplier, points);
 }
