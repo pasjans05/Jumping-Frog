@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
+#include <math.h>
 
 // window size
 // #define LINES 30
@@ -23,6 +24,8 @@
 #define CAR_COLOR1 7 // colour pair for enemy car
 #define CAR_COLOR2 8 // colour pair for semi-enemy car - it will stop when you approach
 #define OBSTACLE_COLOR 9
+#define STORK_COLOR 10
+#define STORK_ROAD_COLOR 11
 #define BACKGROUND_COLOR COLOR_WHITE
 #define ROAD_BACKGROUND_COLOR COLOR_BLACK
 
@@ -47,6 +50,7 @@
 #define CAR_STOP_DISTANCE 2
 #define CAR_CHANGE_CHANCE 5 // chance of a car disappearing when reaching the border and reappearing with changed attributes and possible delay are 1 in CAR_CHANGE_CHANCE
 #define SPEED_CHANGE_CHANCE 50 // chance of speed of cars to be changed
+#define STORK_SPEED_MULTIPLIER 3 // value by which frog speed is devided to get stor speed, it is how much slower stork is than the frog
 
 #define SINGLE_LANE 1 // 4 rows wide
 #define DOUBLE_LANE 2 // 7 rows wide
@@ -355,6 +359,8 @@ WINDOW* Start()
 	init_pair(CAR_COLOR1, COLOR_RED, ROAD_BACKGROUND_COLOR);
 	init_pair(CAR_COLOR2, COLOR_MAGENTA, ROAD_BACKGROUND_COLOR);
 	init_pair(OBSTACLE_COLOR, COLOR_CYAN, BACKGROUND_COLOR);
+	init_pair(STORK_COLOR, COLOR_RED, BACKGROUND_COLOR);
+	init_pair(STORK_ROAD_COLOR, COLOR_RED, ROAD_BACKGROUND_COLOR);
 
 	noecho(); // Switch off echoing, turn off cursor
 	curs_set(0);
@@ -517,7 +523,7 @@ void Movements(object_t* obj, int moveY, int moveX, char* trail)
 	}
 }
 
-// universal function to print any object_t to the screen
+// universal function to print any object_t to the screen and handle it's movements
 void Show(object_t* object, int moveY, int moveX, int road_colour)
 {
 	// 'rebuilding' lane bounding road or printing empty character after object passes 
@@ -681,6 +687,28 @@ point_t* InitPoints()
 	return points;
 }
 
+// initialise stork: 1x1 object depicted as %, STORK_SPEED_MULTIPLIER slower then the frog while continously moving in it's direction
+object_t* InitStork(window_t* w)
+{
+	object_t* object = (object_t*)malloc(sizeof(object_t));
+	object->win = w;
+	object->y = 2;
+	object->x = 1;
+	object->bckg_colour = STORK_COLOR;
+	object->rd_colour = STORK_ROAD_COLOR;
+	object->width = 1;
+	object->height = 1;
+	object->speed = FROG_JUMP_TIME * STORK_SPEED_MULTIPLIER;
+	object->interval = 0;
+
+	object->appearance = (char**)malloc(sizeof(char*));
+	object->appearance[0] = (char*)malloc(sizeof(char));
+
+	strcpy(object->appearance[0], "%");
+
+	return object;
+}
+
 // formula to calculate points from how much time has passed between moves classified as progres (frog appearing to new y line, not revisiting a lane)
 int CalculatePoints(int frame_delta)
 {
@@ -725,6 +753,37 @@ void MoveFrog(object_t* object, int ch, unsigned int frame, object_t** obstacle,
 		case KEY_DOWN: ObstacleCheck(obstacle, numof_obstacles, object, 1, 0, road_color, points, frame); break;
 		case KEY_LEFT: ObstacleCheck(obstacle, numof_obstacles, object, 0, -1, road_color, points, frame); break;
 		case KEY_RIGHT: ObstacleCheck(obstacle, numof_obstacles, object, 0, 1, road_color, points, frame); break;
+		}
+	}
+}
+
+void MoveStork(object_t* frog, object_t* stork, int frame, int road_color)
+{
+	if (frame - stork->interval >= stork->speed)
+	{
+		stork->interval = frame;
+		if (stork->y == frog->y) // check if frog is straight up, down, left or right from the frog
+		{
+			if (stork->x > frog->x) Show(stork, 0, -1, road_color); // move stork left
+			else Show(stork, 0, 1, road_color); // move stork right
+		}
+		else if (stork->x == frog->x)
+		{
+			if (stork->y > frog->y) Show(stork, -1, 0, road_color); // move stork up
+			else Show(stork, 1, 0, road_color); // move stork up
+		}
+		else // if not, check the diagonals using trigonometry
+		{
+			int deltaX = frog->x - stork->x;
+			int deltaY = frog->y - stork->y;
+			int radi = sqrt(deltaX * deltaX + deltaY * deltaY);
+			float sin = float(deltaY) / float(radi);
+			float cos = float(deltaX) / float(radi);
+			// checking directions:
+			if (sin < 0 && cos > 0) Show(stork, -1, 1, road_color); // move up and right
+			else if (sin > 0 && cos > 0) Show(stork, 1, 1, road_color); // move down and right
+			else if (sin > 0 && cos < 0) Show(stork, 1, -1, road_color); // move down and left
+			else if (sin < 0 && cos < 0) Show(stork, -1, -1, road_color); // move up and left
 		}
 	}
 }
@@ -931,7 +990,7 @@ void CarsAction(WINDOW* w, object_t* frog, int frame_no, object_t** obstacles, r
 	}
 }
 
-void MainLoop(window_t* status, object_t* frog, timer_t* timer, road_t** roads, int numof_roads, object_t** obstacles, int numof_obstacles, int car_speed, point_t* points, leaderboard_t** leaderboard, int numof_leaderboard)
+void MainLoop(window_t* status, object_t* frog, timer_t* timer, road_t** roads, int numof_roads, object_t** obstacles, int numof_obstacles, int car_speed, point_t* points, leaderboard_t** leaderboard, int numof_leaderboard, object_t* stork)
 {
 	int ch, pts = 0;
 	int taxI, taxJ, taxied = 0; // taxi identification (i, j) indicating which vechicle is frog taxing with bool variable to check whether frog is currently traveling by taxi
@@ -946,6 +1005,8 @@ void MainLoop(window_t* status, object_t* frog, timer_t* timer, road_t** roads, 
 		}
 		// all car-related mechanics and operations:
 		CarsAction(status->window, frog, timer->frame_no, obstacles, roads, points, ch, &taxied, numof_obstacles, numof_roads, car_speed, &stopI, &stopJ, &taxI, &taxJ, leaderboard, numof_leaderboard);
+
+		MoveStork(frog, stork, timer->frame_no, roads[0]->colour);
 
 		ShowStatus(status, frog, points->points_count);
 		flushinp(); // clear input buffer (avoiding multiple key pressed)
@@ -1002,6 +1063,9 @@ int main()
 
 	point_t* points = InitPoints();
 
+	object_t* stork = InitStork(playwin);
+	// Show(stork, 0, 0, ROAD_EU_COLOR);
+
 	// config file operations
 	char car_char; int car_length, car_speed_multiplier, road_color; // variables to store config data
 	ReadConfig(&frog->appearance[0][0], &car_length, &car_char, &car_speed_multiplier, &road_color);
@@ -1021,5 +1085,5 @@ int main()
 	ShowNewStatus(playwin, timer, frog, 0);
 	Show(frog, 0, 0, roads[0]->colour);
 
-	MainLoop(playwin, frog, timer, roads, numof_roads, obstacles, numof_obstacles, car_speed_multiplier, points, leaderboard, numof_leaderboard);
+	MainLoop(playwin, frog, timer, roads, numof_roads, obstacles, numof_obstacles, car_speed_multiplier, points, leaderboard, numof_leaderboard, stork);
 }
