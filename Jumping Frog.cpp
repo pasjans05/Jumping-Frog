@@ -279,8 +279,10 @@ void Welcome(WINDOW* win, leaderboard_t** leaderboard, int numof_leaderboard)
 	mvwaddstr(win, 5, 1, "Taxis are friendly and can give you a lift when you press 'f'.");
 	wattron(win, COLOR_PAIR(OBSTACLE_COLOR));
 	mvwaddstr(win, 6, 1, "You can't pass obstacles.");
+	wattron(win, COLOR_PAIR(STORK_COLOR));
+	mvwaddstr(win, 7, 1, "BEWARE THE STORK STARTING IN THE TOP LEFT CORNER AS HE TRIES TO EAT YOU!");
 	wattron(win, COLOR_PAIR(MAIN_COLOR));
-	mvwaddstr(win, 8, 1, "Press any key to start...");
+	mvwaddstr(win, 9, 1, "Press any key to start...");
 
 	PrintLeaderboard(win, leaderboard, numof_leaderboard);
 
@@ -815,7 +817,7 @@ void MoveFrog(object_t* object, int ch, unsigned int frame, object_t** obstacle,
 }
 
 // if sufficient time has passed (minimal stork jump time) check what direction is frog and call proper function to move in that direction
-void StorkAction(object_t* frog, object_t* stork, int frame, int road_color)
+void StorkAction(WINDOW* w, object_t* frog, object_t* stork, int frame, int road_color, int points, leaderboard_t** leaderboard, int numof_leaderboard)
 {
 	if (frame - stork->interval >= stork->speed)
 	{
@@ -843,6 +845,7 @@ void StorkAction(object_t* frog, object_t* stork, int frame, int road_color)
 			else if (sin > 0 && cos < 0) MoveStork(stork, 1, -1, road_color); // move down and left
 			else if (sin < 0 && cos < 0) MoveStork(stork, -1, -1, road_color); // move up and left
 		}
+		if (Collision(frog, stork, 0, 0)) EndScreen(w, 0, points, leaderboard, numof_leaderboard);
 	}
 	else PrintStork(stork); // print stork object each time function is called so that stork is never covered by another asset
 }
@@ -1066,7 +1069,7 @@ void MainLoop(window_t* status, object_t* frog, timer_t* timer, road_t** roads, 
 		// all car-related mechanics and operations:
 		CarsAction(status->window, frog, timer->frame_no, obstacles, roads, points, ch, &taxied, numof_obstacles, numof_roads, car_speed, &stopI, &stopJ, &taxI, &taxJ, leaderboard, numof_leaderboard);
 
-		StorkAction(frog, stork, timer->frame_no, roads[0]->colour);
+		StorkAction(status->window, frog, stork, timer->frame_no, roads[0]->colour, points->points_count, leaderboard, numof_leaderboard);
 
 		ShowStatus(status, frog, points->points_count);
 		flushinp(); // clear input buffer (avoiding multiple key pressed)
