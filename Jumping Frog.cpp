@@ -225,11 +225,12 @@ void AddLeaderboardEntry(WINDOW* w, leaderboard_t** leaderboard, int* numof_lead
 		ch = wgetch(w);
 		if (ch == KEY_DOWN)
 			break;
-		else
+		else if (ch >= 33 && ch <= 126) // range of accepted characters
 		{
 			new_entry->name[i] = ch;
 			mvwaddch(w, 3, i + 1, ch);
 		}
+		else i--;
 	}
 	new_entry->name[i] = '\0';
 
@@ -255,7 +256,7 @@ void PrintLeaderboard(WINDOW* win, leaderboard_t** leaderboard, int numof_leader
 	else
 		mvwaddstr(win, BORDER, COLS - MAX_LEADERBOARD_LENGTH, "No leaderboard yet.");
 
-	for (int i = 0; i < numof_leaderboard; i++)
+	for (int i = 0; i < numof_leaderboard && i < LINES - BORDER; i++)
 	{
 		mvwprintw(win, i + BORDER + 1, COLS - MAX_LEADERBOARD_LENGTH, "%d. %s %d", leaderboard[i]->no, leaderboard[i]->name, leaderboard[i]->points);
 	}
