@@ -208,7 +208,7 @@ void AddToLeaderboard(leaderboard_t** leaderboard, int numof_leaderboard, leader
 }
 
 // create new entry to be added leaderboard and callout function that saves it to file
-void AddLeaderboardEntry(WINDOW* w, leaderboard_t** leaderboard, int* numof_leaderboard, int points, int win)
+void AddLeaderboardEntry(WINDOW* w, leaderboard_t** leaderboard, int* numof_leaderboard, int points)
 {
 	leaderboard_t* new_entry = (leaderboard_t*)malloc(sizeof(leaderboard_t));
 	new_entry->points = points;
@@ -263,6 +263,15 @@ void PrintLeaderboard(WINDOW* win, leaderboard_t** leaderboard, int numof_leader
 
 // ---------------------------window functions:---------------------------
 
+// terminate execution of the program
+void End(WINDOW* w)
+{
+	delwin(w);
+	endwin();
+	refresh();
+	exit(0);
+}
+
 // Welcome screen: press any key to continue
 void Welcome(WINDOW* win, leaderboard_t** leaderboard, int numof_leaderboard)
 {
@@ -292,52 +301,47 @@ void Welcome(WINDOW* win, leaderboard_t** leaderboard, int numof_leaderboard)
 }
 
 // End of the game screen: press any key to continue
-void EndScreen(WINDOW* w, int win, int pts, leaderboard_t** leaderboard, int numof_leaderboard)
+void EndScreen(WINDOW* w, int pts, leaderboard_t** leaderboard, int numof_leaderboard)
 {
 	nodelay(w, FALSE);
 	wattron(w, COLOR_PAIR(MAIN_COLOR));
 	PrintFrame(w);
-	if (win)
-		mvwaddstr(w, 1, 1, "You won.");
-	else
-		mvwaddstr(w, 1, 1, "You lost.");
-	// TODO: endscreen time
-	// mvwaddstr(w, 3, 1, "Your time: "); 
-	mvwaddstr(w, 4, 1, "Your points: ");
-	mvwprintw(w, 4, 15, "%d", pts);
-	mvwaddstr(w, 8, 1, "Press any key to quit...");
 	PrintLeaderboard(w, leaderboard, numof_leaderboard);
-	if (win != -1) // if entry hasn't been added to the leaderboard yet
+	mvwaddstr(w, 8, 1, "Press any key to quit...");
+	if (pts)
 	{
+		mvwaddstr(w, 1, 1, "You won.");
+		mvwaddstr(w, 4, 1, "Your points: ");
+		mvwprintw(w, 4, 15, "%d", pts);
 		mvwaddstr(w, 5, 1, "Press 'l' to add your score to the leaderboard.");
 
 		int ch = wgetch(w);
 
 		if (ch == 'l')
 		{
-			AddLeaderboardEntry(w, leaderboard, &numof_leaderboard, pts, win);
-			EndScreen(w, -1, pts, ReadLeaderboard(&numof_leaderboard), numof_leaderboard); // -1 in win parameter make the function not ask about leaderboard addition
+			AddLeaderboardEntry(w, leaderboard, &numof_leaderboard, pts);
+			wattron(w, COLOR_PAIR(MAIN_COLOR));
+			PrintFrame(w);
+			leaderboard = ReadLeaderboard(&numof_leaderboard);
+			PrintLeaderboard(w, leaderboard, numof_leaderboard);
+			mvwaddstr(w, 1, 1, "You won.");
+			mvwaddstr(w, 4, 1, "Your points: ");
+			mvwprintw(w, 4, 15, "%d", pts);
+			mvwaddstr(w, 8, 1, "Press any key to quit...");
 		}
 		else
 		{
-			wclear(w); // clear (after next refresh)
-			wrefresh(w);
-
-			delwin(w);
-			endwin();
-			refresh();
-			exit(0);
+			End(w);
 		}
 	}
+	else
+		mvwaddstr(w, 1, 1, "You lost.");
+	// TODO: endscreen time
+	// mvwaddstr(w, 3, 1, "Your time: "); 
+
 	wgetch(w); // wait here
 
-	wclear(w); // clear (after next refresh)
-	wrefresh(w);
-
-	delwin(w);
-	endwin();
-	refresh();
-	exit(0);
+	End(w);
 }
 
 // window start parameters and initialization
@@ -845,7 +849,7 @@ void StorkAction(WINDOW* w, object_t* frog, object_t* stork, int frame, int road
 			else if (sin > 0 && cos < 0) MoveStork(stork, 1, -1, road_color); // move down and left
 			else if (sin < 0 && cos < 0) MoveStork(stork, -1, -1, road_color); // move up and left
 		}
-		if (Collision(frog, stork, 0, 0)) EndScreen(w, 0, points, leaderboard, numof_leaderboard);
+		if (Collision(frog, stork, 0, 0)) EndScreen(w, 0, leaderboard, numof_leaderboard); // if player lost return 0 as points
 	}
 	else PrintStork(stork); // print stork object each time function is called so that stork is never covered by another asset
 }
@@ -860,7 +864,7 @@ void CarWrapping(object_t* object, int frame, int taxiing, int x_separation, int
 	else
 		object->x = COLS - BORDER - object->width + 1;
 
-	if (taxiing) EndScreen(object->win->window, 0, pts, leaderboard, numof_leaderboard);
+	if (taxiing) EndScreen(object->win->window, 0, leaderboard, numof_leaderboard); // if player lost return 0 as points
 	if (RA(1, CAR_CHANGE_CHANCE) % CAR_CHANGE_CHANCE == 0) // 1 in CAR_CHANGE_CHANCE chance of car changing it's attributes
 	{
 		object->rd_colour = CarColour(); // car behaviour is connected to it's colour so changing car colour changes car
@@ -1002,7 +1006,7 @@ void CollisionAction(WINDOW* w, object_t* frog, road_t** roads, object_t** obsta
 		}
 	}
 	else
-		EndScreen(w, 0, points->points_count, leaderboard, numof_leaderboard);
+		EndScreen(w, 0, leaderboard, numof_leaderboard); // if player lost return 0 as points
 }
 
 // sub-function of CarsAction to do operations related to semi-enemy car (one that stops when near a car)
@@ -1064,7 +1068,7 @@ void MainLoop(window_t* status, object_t* frog, timer_t* timer, road_t** roads, 
 		else if (!taxied)
 		{
 			MoveFrog(frog, ch, timer->frame_no, obstacles, numof_obstacles, roads[0]->colour, points);
-			if (frog->y == FINISH) EndScreen(status->window, 1, points->points_count, leaderboard, numof_leaderboard);
+			if (frog->y == FINISH) EndScreen(status->window, points->points_count, leaderboard, numof_leaderboard);
 		}
 		// all car-related mechanics and operations:
 		CarsAction(status->window, frog, timer->frame_no, obstacles, roads, points, ch, &taxied, numof_obstacles, numof_roads, car_speed, &stopI, &stopJ, &taxI, &taxJ, leaderboard, numof_leaderboard);
@@ -1075,7 +1079,7 @@ void MainLoop(window_t* status, object_t* frog, timer_t* timer, road_t** roads, 
 		flushinp(); // clear input buffer (avoiding multiple key pressed)
 		UpdateTimer(timer, status);// update timer & sleep
 	}
-	EndScreen(status->window, 0, points->points_count, leaderboard, numof_leaderboard);
+	EndScreen(status->window, 0, leaderboard, numof_leaderboard); // if player lost return 0 as points
 }
 
 // ---------------------------config file data reading:---------------------------
