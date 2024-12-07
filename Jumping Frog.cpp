@@ -26,6 +26,7 @@
 #define OBSTACLE_COLOR 9
 #define STORK_COLOR 10
 #define STORK_ROAD_COLOR 11
+#define STORK_OBSTACLE_COLOR 12
 #define BACKGROUND_COLOR COLOR_WHITE
 #define ROAD_BACKGROUND_COLOR COLOR_BLACK
 
@@ -361,6 +362,7 @@ WINDOW* Start()
 	init_pair(OBSTACLE_COLOR, COLOR_CYAN, BACKGROUND_COLOR);
 	init_pair(STORK_COLOR, COLOR_RED, BACKGROUND_COLOR);
 	init_pair(STORK_ROAD_COLOR, COLOR_RED, ROAD_BACKGROUND_COLOR);
+	init_pair(STORK_OBSTACLE_COLOR, COLOR_RED, COLOR_CYAN);
 
 	noecho(); // Switch off echoing, turn off cursor
 	curs_set(0);
@@ -395,15 +397,19 @@ window_t* Init(WINDOW* parent, int lines, int cols, int y, int x, int colour, in
 	return W;
 }
 
-// check if at position (y,x) background colour matches background colour set for roads
-int CheckRoad(int y, int x)
+int GetBckgCol(int y, int x)
 {
 	chtype ch = mvinch(y, x);
 	int color_pair = PAIR_NUMBER(ch & A_COLOR); // extract color pair from ch
-
 	short foregrnd, bckgrnd;
 	pair_content(color_pair, &foregrnd, &bckgrnd); // extract foreground and background color from color_pair
-	if (bckgrnd == ROAD_BACKGROUND_COLOR)
+	return bckgrnd;
+}
+
+// check if at position (y,x) background colour matches background colour set for roads
+int CheckRoad(int y, int x)
+{
+	if (GetBckgCol(y, x) == ROAD_BACKGROUND_COLOR)
 		return 1;
 	return 0;
 }
@@ -445,13 +451,18 @@ void Print(object_t* object)
 		mvwprintw(object->win->window, object->y + i, object->x, "%s", object->appearance[i]);
 }
 
-// replaces object position with blank space
-void PrintBlank(object_t* object)
+// replaces object position with block of the same size consisting of c character
+void PrintBlank(object_t* object, char c)
 {
-	wattron(object->win->window, COLOR_PAIR(ROAD_EU_COLOR)); // any road colour pair can be used as we are onlu interested in background colour
 	for (int i = 0; i < object->height; i++)
 		for (int j=0; j<object->width; j++)
-			mvwprintw(object->win->window, object->y + i, object->x + j, " ");
+			mvwprintw(object->win->window, object->y + i, object->x + j, "%c", c);
+}
+
+void PrintStork(object_t* object)
+{
+	wattron(object->win->window, COLOR_PAIR(object->bckg_colour)); // ensures stork is against proper background
+	Print(object);
 }
 
 // shows road on the screen
@@ -523,12 +534,19 @@ void Movements(object_t* obj, int moveY, int moveX, char* trail)
 	}
 }
 
+// check if point y, x is on the road line
+int CheckRoadLine(int y, int x)
+{
+	if ((mvinch(y, x + 1) & A_CHARTEXT) == '-' || (mvinch(y, x - 1) & A_CHARTEXT) == '-') return 1;
+	return 0;
+}
+
 // universal function to print any object_t to the screen and handle it's movements
 void Show(object_t* object, int moveY, int moveX, int road_colour)
 {
 	// 'rebuilding' lane bounding road or printing empty character after object passes 
 	char* trail = (char*)malloc((object->width + 1) * sizeof(char));
-	if ((mvinch(object->y, object->x + 1) & A_CHARTEXT) == '-' || (mvinch(object->y, object->x - 1) & A_CHARTEXT) == '-')
+	if (CheckRoadLine(object->y, object->x))
 		memset(trail, '-', object->width);
 	else
 		memset(trail, ' ', object->width);
@@ -546,6 +564,44 @@ void Show(object_t* object, int moveY, int moveX, int road_colour)
 	Print(object);
 
 	wrefresh(object->win->window);
+}
+
+// restore character after stork moves
+void ClearStorkSpace(object_t* stork, int road_color)
+{
+	int backgrndcol = GetBckgCol(stork->y, stork->x);
+	short obstacle_colour, obstacle_bckgrnd_col;
+	pair_content(OBSTACLE_COLOR, &obstacle_colour, &obstacle_bckgrnd_col);
+	if (backgrndcol == BACKGROUND_COLOR)
+	{
+		wattron(stork->win->window, COLOR_PAIR(MAIN_COLOR));
+		PrintBlank(stork, ' ');
+	}
+	else if (backgrndcol == ROAD_BACKGROUND_COLOR)
+	{
+		wattron(stork->win->window, COLOR_PAIR(road_color));
+		if (CheckRoadLine(stork->y, stork->x)) PrintBlank(stork, '-');
+		else PrintBlank(stork, ' ');
+	}
+	else if (backgrndcol == obstacle_colour)
+	{
+		wattron(stork->win->window, COLOR_PAIR(OBSTACLE_COLOR));
+		PrintBlank(stork, '7');
+	}
+}
+
+void MoveStork(object_t* stork, int moveY, int moveX, int road_color)
+{
+	ClearStorkSpace(stork, road_color);
+	stork->x += moveX;
+	stork->y += moveY;
+	// ensure proper background and store it in stork->bckg_color
+	int backgroundcol = GetBckgCol(stork->y, stork->x);
+	if ((mvinch(stork->y, stork->x) & A_CHARTEXT) == '7') stork->bckg_colour = STORK_OBSTACLE_COLOR; // first check if new stork position is above obstacle
+	else if (backgroundcol == BACKGROUND_COLOR) stork->bckg_colour = STORK_COLOR;
+	else if (backgroundcol == ROAD_BACKGROUND_COLOR) stork->bckg_colour = STORK_ROAD_COLOR;
+
+	PrintStork(stork);
 }
 
 // frog initialisation; note: frog is of a constant size of 1x1 (single character)
@@ -688,14 +744,13 @@ point_t* InitPoints()
 }
 
 // initialise stork: 1x1 object depicted as %, STORK_SPEED_MULTIPLIER slower then the frog while continously moving in it's direction
-object_t* InitStork(window_t* w)
+object_t* InitStork(window_t* w, int road_color)
 {
 	object_t* object = (object_t*)malloc(sizeof(object_t));
 	object->win = w;
 	object->y = 2;
 	object->x = 1;
 	object->bckg_colour = STORK_COLOR;
-	object->rd_colour = STORK_ROAD_COLOR;
 	object->width = 1;
 	object->height = 1;
 	object->speed = FROG_JUMP_TIME * STORK_SPEED_MULTIPLIER;
@@ -705,6 +760,8 @@ object_t* InitStork(window_t* w)
 	object->appearance[0] = (char*)malloc(sizeof(char));
 
 	strcpy(object->appearance[0], "%");
+
+	Show(object, 0, 0, road_color);
 
 	return object;
 }
@@ -757,20 +814,21 @@ void MoveFrog(object_t* object, int ch, unsigned int frame, object_t** obstacle,
 	}
 }
 
-void MoveStork(object_t* frog, object_t* stork, int frame, int road_color)
+// if sufficient time has passed (minimal stork jump time) check what direction is frog and call proper function to move in that direction
+void StorkAction(object_t* frog, object_t* stork, int frame, int road_color)
 {
 	if (frame - stork->interval >= stork->speed)
 	{
 		stork->interval = frame;
 		if (stork->y == frog->y) // check if frog is straight up, down, left or right from the frog
 		{
-			if (stork->x > frog->x) Show(stork, 0, -1, road_color); // move stork left
-			else Show(stork, 0, 1, road_color); // move stork right
+			if (stork->x > frog->x) MoveStork(stork, 0, -1, road_color); // move stork left
+			else MoveStork(stork, 0, 1, road_color); // move stork right
 		}
 		else if (stork->x == frog->x)
 		{
-			if (stork->y > frog->y) Show(stork, -1, 0, road_color); // move stork up
-			else Show(stork, 1, 0, road_color); // move stork up
+			if (stork->y > frog->y) MoveStork(stork, -1, 0, road_color); // move stork up
+			else MoveStork(stork, 1, 0, road_color); // move stork up
 		}
 		else // if not, check the diagonals using trigonometry
 		{
@@ -780,18 +838,20 @@ void MoveStork(object_t* frog, object_t* stork, int frame, int road_color)
 			float sin = float(deltaY) / float(radi);
 			float cos = float(deltaX) / float(radi);
 			// checking directions:
-			if (sin < 0 && cos > 0) Show(stork, -1, 1, road_color); // move up and right
-			else if (sin > 0 && cos > 0) Show(stork, 1, 1, road_color); // move down and right
-			else if (sin > 0 && cos < 0) Show(stork, 1, -1, road_color); // move down and left
-			else if (sin < 0 && cos < 0) Show(stork, -1, -1, road_color); // move up and left
+			if (sin < 0 && cos > 0) MoveStork(stork, -1, 1, road_color); // move up and right
+			else if (sin > 0 && cos > 0) MoveStork(stork, 1, 1, road_color); // move down and right
+			else if (sin > 0 && cos < 0) MoveStork(stork, 1, -1, road_color); // move down and left
+			else if (sin < 0 && cos < 0) MoveStork(stork, -1, -1, road_color); // move up and left
 		}
 	}
+	else PrintStork(stork); // print stork object each time function is called so that stork is never covered by another asset
 }
 
 // car behaviour when it reaches the border; some cars may reappear with delay and changed attributes
 void CarWrapping(object_t* object, int frame, int taxiing, int x_separation, int direction, int road_colour, int pts, leaderboard_t** leaderboard, int numof_leaderboard)
 {
-	PrintBlank(object);
+	wattron(object->win->window, COLOR_PAIR(road_colour));
+	PrintBlank(object, ' '); // clear space after car
 	if (direction > 0)
 		object->x = BORDER - 1;
 	else
@@ -1006,7 +1066,7 @@ void MainLoop(window_t* status, object_t* frog, timer_t* timer, road_t** roads, 
 		// all car-related mechanics and operations:
 		CarsAction(status->window, frog, timer->frame_no, obstacles, roads, points, ch, &taxied, numof_obstacles, numof_roads, car_speed, &stopI, &stopJ, &taxI, &taxJ, leaderboard, numof_leaderboard);
 
-		MoveStork(frog, stork, timer->frame_no, roads[0]->colour);
+		StorkAction(frog, stork, timer->frame_no, roads[0]->colour);
 
 		ShowStatus(status, frog, points->points_count);
 		flushinp(); // clear input buffer (avoiding multiple key pressed)
@@ -1063,15 +1123,13 @@ int main()
 
 	point_t* points = InitPoints();
 
-	object_t* stork = InitStork(playwin);
-	// Show(stork, 0, 0, ROAD_EU_COLOR);
-
 	// config file operations
 	char car_char; int car_length, car_speed_multiplier, road_color; // variables to store config data
 	ReadConfig(&frog->appearance[0][0], &car_length, &car_char, &car_speed_multiplier, &road_color);
 
 	object_t** obstacles;
 	road_t** roads;
+	object_t* stork = InitStork(playwin, road_color);
 
 	Level1ne(&roads, &obstacles, &numof_roads, &numof_obstacles, playwin, road_color, car_length, car_char, car_speed_multiplier);
 
