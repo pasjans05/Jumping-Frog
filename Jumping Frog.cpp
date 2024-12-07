@@ -1032,6 +1032,27 @@ void Level2wo(road_t*** roads, object_t*** obstacles, int* numof_roads, int* num
 
 }
 
+object_t** Level3Obstacles(window_t* w, int numof_obstacles)
+{
+	object_t** obstacles = (object_t**)malloc(numof_obstacles * sizeof(object_t*));
+
+	obstacles[0] = InitObstacle(w, 2, 40, OBSTACLE_COLOR, 78, 2);
+	obstacles[1] = InitObstacle(w, 2, 2, OBSTACLE_COLOR, 35, 2);
+	obstacles[2] = InitObstacle(w, 7, 1, OBSTACLE_COLOR, 44, 2);
+	obstacles[3] = InitObstacle(w, 7, 61, OBSTACLE_COLOR, 58, 3);
+	obstacles[4] = InitObstacle(w, 6, 45, OBSTACLE_COLOR, 1, 4);
+	obstacles[5] = InitObstacle(w, 12, 45, OBSTACLE_COLOR, 1, 4);
+	obstacles[6] = InitObstacle(w, 12, 90, OBSTACLE_COLOR, 1, 4);
+	obstacles[7] = InitObstacle(w, 12, 45, OBSTACLE_COLOR, 45, 2);
+	obstacles[8] = InitObstacle(w, 15, 47, OBSTACLE_COLOR, 40, 1);
+	obstacles[9] = InitObstacle(w, 18, 20, OBSTACLE_COLOR, 1, 6);
+	obstacles[10] = InitObstacle(w, 18, 100, OBSTACLE_COLOR, 1, 6);
+	obstacles[11] = InitObstacle(w, 18, 21, OBSTACLE_COLOR, 80, 1);
+	obstacles[12] = InitObstacle(w, 12, 1, OBSTACLE_COLOR, 40, 4);
+
+	return obstacles;
+}
+
 void Level3hree(road_t*** roads, object_t*** obstacles, int* numof_roads, int* numof_obstacles, window_t* w, int col, int car_length, char car_char, int car_speed)
 {
 	*numof_roads = 4;
@@ -1049,23 +1070,7 @@ void Level3hree(road_t*** roads, object_t*** obstacles, int* numof_roads, int* n
 	*roads = roads1;
 
 	// initialise obstacles:
-
-	object_t** obstacles1 = (object_t**)malloc(*numof_obstacles * sizeof(object_t*));
-
-	obstacles1[0] = InitObstacle(w, 2, 40, OBSTACLE_COLOR, 78, 2);
-	obstacles1[1] = InitObstacle(w, 2, 2, OBSTACLE_COLOR, 35, 2);
-	obstacles1[2] = InitObstacle(w, 7, 1, OBSTACLE_COLOR, 44, 2);
-	obstacles1[3] = InitObstacle(w, 7, 61, OBSTACLE_COLOR, 58, 3);
-	obstacles1[4] = InitObstacle(w, 6, 45, OBSTACLE_COLOR, 1, 4);
-	obstacles1[5] = InitObstacle(w, 12, 45, OBSTACLE_COLOR, 1, 4);
-	obstacles1[6] = InitObstacle(w, 12, 90, OBSTACLE_COLOR, 1, 4);
-	obstacles1[7] = InitObstacle(w, 12, 45, OBSTACLE_COLOR, 45, 2);
-	obstacles1[8] = InitObstacle(w, 15, 47, OBSTACLE_COLOR, 40, 1);
-	obstacles1[9] = InitObstacle(w, 18, 20, OBSTACLE_COLOR, 1, 6);
-	obstacles1[10] = InitObstacle(w, 18, 100, OBSTACLE_COLOR, 1, 6);
-	obstacles1[11] = InitObstacle(w, 18, 21, OBSTACLE_COLOR, 80, 1);
-	obstacles1[12] = InitObstacle(w, 12, 1, OBSTACLE_COLOR, 40, 4);
-
+	object_t** obstacles1 = Level3Obstacles(w, *numof_obstacles);
 	*obstacles = obstacles1;
 
 	// printing roads and obstacles on the screen:
