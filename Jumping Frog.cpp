@@ -46,12 +46,12 @@
 #define MIN_CAR_SEPARATION 6
 #define MAX_CAR_SEPARATION (3*MIN_CAR_SEPARATION)
 
-#define UNIQE_CARS 3 // number of types of cars: taxi, color1 enemy car, color2 semi-enemy car
+#define UNIQUE_CARS 3 // number of types of cars: taxi, color1 enemy car, color2 semi-enemy car
 
 #define CAR_STOP_DISTANCE 2
 #define CAR_CHANGE_CHANCE 5 // chance of a car disappearing when reaching the border and reappearing with changed attributes and possible delay are 1 in CAR_CHANGE_CHANCE
 #define SPEED_CHANGE_CHANCE 50 // chance of speed of cars to be changed
-#define STORK_SPEED_MULTIPLIER 3 // value by which frog speed is devided to get stor speed, it is how much slower stork is than the frog
+#define STORK_SPEED_MULTIPLIER 3 // value by which frog speed is divided to get stor speed, it is how much slower stork is than the frog
 
 #define SINGLE_LANE 1 // 4 rows wide
 #define DOUBLE_LANE 2 // 7 rows wide
@@ -103,6 +103,7 @@ typedef struct {
 	int last_y_progres_frame;
 	int y_progres;
 	int points_count;
+	int level_multiplier;
 } point_t;
 
 typedef struct {
@@ -292,7 +293,7 @@ void Welcome(WINDOW* win, leaderboard_t** leaderboard, int numof_leaderboard)
 	wattron(win, COLOR_PAIR(STORK_COLOR));
 	mvwaddstr(win, 7, 1, "BEWARE THE STORK STARTING IN THE TOP LEFT CORNER AS HE TRIES TO CATCH YOU!");
 	wattron(win, COLOR_PAIR(MAIN_COLOR));
-	mvwaddstr(win, 9, 1, "Press any key to start...");
+	mvwaddstr(win, 9, 1, "Press any key to continue...");
 
 	PrintLeaderboard(win, leaderboard, numof_leaderboard);
 
@@ -379,6 +380,9 @@ WINDOW* Start()
 // default screen
 void CleanWin(window_t* W)
 {
+	wclear(W->window);
+	wrefresh(W->window);
+
 	wattron(W->window, COLOR_PAIR(W->colour));
 	// frame
 	PrintFrame(W->window);
@@ -397,7 +401,7 @@ window_t* Init(WINDOW* parent, int y, int x, int colour, int delay)
 	window_t* W = (window_t*)malloc(sizeof(window_t));
 	W->x = x; W->y = y; W->lines = LINES; W->cols = COLS; W->colour = colour;
 	W->window = subwin(parent, LINES, COLS, y, x);
-	CleanWin(W);
+	// CleanWin(W);
 	if (delay == DELAY_OFF) // non-blocking reading of characters (for real-time game)
 		nodelay(W->window, TRUE);
 	wrefresh(W->window);
@@ -466,9 +470,10 @@ void PrintBlank(object_t* object, char c)
 			mvwprintw(object->win->window, object->y + i, object->x + j, "%c", c);
 }
 
-void PrintStork(object_t* object)
+// change colour pair specified in object's parameters overriding current colour pair
+void PrintColored(object_t* object)
 {
-	wattron(object->win->window, COLOR_PAIR(object->bckg_colour)); // ensures stork is against proper background
+	wattron(object->win->window, COLOR_PAIR(object->bckg_colour)); // ensures object is against proper background
 	Print(object);
 }
 
@@ -608,7 +613,7 @@ void MoveStork(object_t* stork, int moveY, int moveX, int road_color)
 	else if (backgroundcol == BACKGROUND_COLOR) stork->bckg_colour = STORK_COLOR;
 	else if (backgroundcol == ROAD_BACKGROUND_COLOR) stork->bckg_colour = STORK_ROAD_COLOR;
 
-	PrintStork(stork);
+	PrintColored(stork);
 }
 
 // frog initialisation; note: frog is of a constant size of 1x1 (single character)
@@ -741,17 +746,18 @@ object_t* InitObstacle(window_t* w, int posY, int posX, int col, int width, int 
 }
 
 // initialise starting points parameters
-point_t* InitPoints()
+point_t* InitPoints(int level_number)
 {
 	point_t* points = (point_t*)malloc(sizeof(point_t));
 	points->last_y_progres_frame = 0;
 	points->y_progres = LINES - BORDER;
 	points->points_count = 0;
+	points->level_multiplier = level_number;
 	return points;
 }
 
 // initialise stork: 1x1 object depicted as %, STORK_SPEED_MULTIPLIER slower then the frog while continously moving in it's direction
-object_t* InitStork(window_t* w, int road_color)
+object_t* InitStork(window_t* w, int road_color, int level_no)
 {
 	object_t* object = (object_t*)malloc(sizeof(object_t));
 	object->win = w;
@@ -760,7 +766,7 @@ object_t* InitStork(window_t* w, int road_color)
 	object->bckg_colour = STORK_COLOR;
 	object->width = 1;
 	object->height = 1;
-	object->speed = FROG_JUMP_TIME * STORK_SPEED_MULTIPLIER;
+	object->speed = FROG_JUMP_TIME * (level_no == 3 ? 2 * STORK_SPEED_MULTIPLIER : STORK_SPEED_MULTIPLIER); // stork is 2 times slower on level 3
 	object->interval = 0;
 
 	object->appearance = (char**)malloc(sizeof(char*));
@@ -797,7 +803,7 @@ int MoveFrog(object_t** obstacles, int numof_obstacles, object_t* object, int mo
 	}
 	if (object->y + moveY < points->y_progres) // whether frog has already made progress up to this lane
 	{
-		points->points_count += CalculatePoints(frame - points->last_y_progres_frame);
+		points->points_count += (CalculatePoints(frame - points->last_y_progres_frame) * points->level_multiplier);
 		points->last_y_progres_frame = frame;
 		points->y_progres = object->y + moveY;
 	}
@@ -852,7 +858,7 @@ void StorkAction(WINDOW* w, object_t* frog, object_t* stork, int frame, int road
 		}
 		if (Collision(frog, stork, 0, 0)) EndScreen(w, 0, leaderboard, numof_leaderboard); // if player lost return 0 as points
 	}
-	else PrintStork(stork); // print stork object each time function is called so that stork is never covered by another asset
+	else PrintColored(stork); // print stork object each time function is called so that stork is never covered by another asset
 }
 
 // car behaviour when it reaches the border; some cars may reappear with delay and changed attributes
@@ -989,7 +995,136 @@ void Level1ne(road_t*** roads, object_t*** obstacles, int* numof_roads, int* num
 
 	for (int i = 0; i < *numof_obstacles; i++)
 		Show(obstacles1[i], 0, 0, roads1[0]->colour); // colour is taken from 1st road since it always has to exist and colour is common for all roads (defined at the start and may be changed by the config file)
+}
 
+void Level2wo(road_t*** roads, object_t*** obstacles, int* numof_roads, int* numof_obstacles, window_t* w, int col, int car_length, char car_char, int car_speed) // medium level with some road narrowings might pose a challange to new players
+{
+	*numof_roads = 3;
+	*numof_obstacles = 4;
+
+	// initialise roads:
+
+	road_t** roads1 = (road_t**)malloc(*numof_roads * sizeof(road_t*));
+
+	roads1[0] = InitRoad(w, 23, SINGLE_LANE, col, car_length, car_char, -car_speed);
+	roads1[1] = InitRoad(w, 15, DOUBLE_LANE, col, car_length, car_char, car_speed);
+	roads1[2] = InitRoad(w, 3, TRIPLE_LANE, col, car_length, car_char, -car_speed);
+
+	*roads = roads1;
+
+	// initialise obstacles:
+
+	object_t** obstacles1 = (object_t**)malloc(*numof_obstacles * sizeof(object_t*));
+
+	obstacles1[0] = InitObstacle(w, 2, 40, OBSTACLE_COLOR, 60, 2);
+	obstacles1[1] = InitObstacle(w, 26, 1, OBSTACLE_COLOR, 90, 1);
+	obstacles1[2] = InitObstacle(w, 22, 70, OBSTACLE_COLOR, 49, 1);
+	obstacles1[3] = InitObstacle(w, 13, 1, OBSTACLE_COLOR, 50, 2);
+
+	*obstacles = obstacles1;
+
+	// printing roads and obstacles on the screen:
+	for (int i = 0; i < *numof_roads; i++)
+		PrintRoad(roads1[i]);
+
+	for (int i = 0; i < *numof_obstacles; i++)
+		PrintColored(obstacles1[i]); // colour is taken from 1st road since it always has to exist and colour is common for all roads (defined at the start and may be changed by the config file)
+
+}
+
+void Level3hree(road_t*** roads, object_t*** obstacles, int* numof_roads, int* numof_obstacles, window_t* w, int col, int car_length, char car_char, int car_speed)
+{
+	*numof_roads = 4;
+	*numof_obstacles = 13;
+
+	// initialise roads:
+
+	road_t** roads1 = (road_t**)malloc(*numof_roads * sizeof(road_t*));
+
+	roads1[0] = InitRoad(w, 23, SINGLE_LANE, col, car_length, car_char, -car_speed);
+	roads1[1] = InitRoad(w, 15, SINGLE_LANE, col, car_length, car_char, car_speed);
+	roads1[2] = InitRoad(w, 9, SINGLE_LANE, col, car_length, car_char, -car_speed);
+	roads1[3] = InitRoad(w, 3, SINGLE_LANE, col, car_length, car_char, car_speed);
+
+	*roads = roads1;
+
+	// initialise obstacles:
+
+	object_t** obstacles1 = (object_t**)malloc(*numof_obstacles * sizeof(object_t*));
+
+	obstacles1[0] = InitObstacle(w, 2, 40, OBSTACLE_COLOR, 78, 2);
+	obstacles1[1] = InitObstacle(w, 2, 2, OBSTACLE_COLOR, 35, 2);
+	obstacles1[2] = InitObstacle(w, 7, 1, OBSTACLE_COLOR, 44, 2);
+	obstacles1[3] = InitObstacle(w, 7, 61, OBSTACLE_COLOR, 58, 3);
+	obstacles1[4] = InitObstacle(w, 6, 45, OBSTACLE_COLOR, 1, 4);
+	obstacles1[5] = InitObstacle(w, 12, 45, OBSTACLE_COLOR, 1, 4);
+	obstacles1[6] = InitObstacle(w, 12, 90, OBSTACLE_COLOR, 1, 4);
+	obstacles1[7] = InitObstacle(w, 12, 45, OBSTACLE_COLOR, 45, 2);
+	obstacles1[8] = InitObstacle(w, 15, 47, OBSTACLE_COLOR, 40, 1);
+	obstacles1[9] = InitObstacle(w, 18, 20, OBSTACLE_COLOR, 1, 6);
+	obstacles1[10] = InitObstacle(w, 18, 100, OBSTACLE_COLOR, 1, 6);
+	obstacles1[11] = InitObstacle(w, 18, 21, OBSTACLE_COLOR, 80, 1);
+	obstacles1[12] = InitObstacle(w, 12, 1, OBSTACLE_COLOR, 40, 4);
+
+	*obstacles = obstacles1;
+
+	// printing roads and obstacles on the screen:
+	for (int i = 0; i < *numof_roads; i++)
+		PrintRoad(roads1[i]);
+
+	for (int i = 0; i < *numof_obstacles; i++)
+		PrintColored(obstacles1[i]); // colour is taken from 1st road since it always has to exist and colour is common for all roads (defined at the start and may be changed by the config file)
+}
+
+// prints information about levels to the screen
+void LevelSelectionText(WINDOW* w)
+{
+	mvwaddstr(w, 1, 1, "Welcome to Jumping Frog: The Game");
+	mvwaddstr(w, 2, 1, "Please select level you want to play.");
+	mvwaddstr(w, 3, 1, "Points you get are multiplied by the level number you choose.");
+	mvwaddstr(w, 5, 1, "Level 1ne: ");
+	mvwaddstr(w, 6, 1, "Very basic level to familiarise player with game mechanics and objective.");
+	mvwaddstr(w, 7, 1, "Neither cars, stork nor obstacles should pose a problem with going to the fininsh, more of a slight inconvinience.");
+	mvwaddstr(w, 9, 1, "Level 2wo: ");
+	mvwaddstr(w, 10, 1, "Slightly harder level.");
+	mvwaddstr(w, 11, 1, "Baku GP - styled road narrowings could pose a challenge to unexperience players,");
+	mvwaddstr(w, 12, 1, "but wide roads ease the traffic so cars should not be a problem.");
+	mvwaddstr(w, 14, 1, "Level 3hree: ");
+	mvwaddstr(w, 15, 1, "A true challenge for Jumping Frog enjoyers. Multiple harder and easier paths to victory.");
+	mvwaddstr(w, 16, 1, "Navigate around narrow streets with walls on the sides just as in Monaco GP to find the way to score the most points.");
+}
+
+int LevelSelection(road_t*** roads, object_t*** obstacles, int* numof_roads, int* numof_obstacles, window_t* w, int col, int car_length, char car_char, int car_speed)
+{
+	int level;
+	wattron(w->window, COLOR_PAIR(MAIN_COLOR));
+	PrintFrame(w->window);
+
+	LevelSelectionText(w->window);
+
+	while (level = wgetch(w->window))
+	{
+		if (level == '1') 
+		{
+			CleanWin(w);
+			Level1ne(roads, obstacles, numof_roads, numof_obstacles, w, col, car_length, car_char, car_speed);
+			break;
+		}
+		else if (level == '2')
+		{
+			CleanWin(w);
+			Level2wo(roads, obstacles, numof_roads, numof_obstacles, w, col, car_length, car_char, car_speed);
+			break;
+		}
+		else if (level == '3')
+		{
+			CleanWin(w);
+			Level3hree(roads, obstacles, numof_roads, numof_obstacles, w, col, car_length, car_char, car_speed);
+			break;
+		}
+	}
+
+	return level - '0';
 }
 
 // ---------------------------main loop and related functions:---------------------------
@@ -1122,7 +1257,7 @@ void ReadConfig(char* frog_appeal, int* car_length, char* car_char, int* car_spe
 int main()
 {
 	srand(time(NULL)); // new seed for each road definition
-	int numof_roads, numof_obstacles, numof_leaderboard;
+	int numof_roads, numof_obstacles, numof_leaderboard, level_no;
 
 	leaderboard_t** leaderboard = ReadLeaderboard(&numof_leaderboard);
 
@@ -1136,18 +1271,19 @@ int main()
 
 	object_t* frog = InitFrog(playwin, FROG_COLOR, FROG_ROAD_COLOR);
 
-	point_t* points = InitPoints();
-
 	// config file operations
 	char car_char; int car_length, car_speed_multiplier, road_color; // variables to store config data
 	ReadConfig(&frog->appearance[0][0], &car_length, &car_char, &car_speed_multiplier, &road_color);
 
 	object_t** obstacles;
 	road_t** roads;
-	object_t* stork = InitStork(playwin, road_color);
-
-	Level1ne(&roads, &obstacles, &numof_roads, &numof_obstacles, playwin, road_color, car_length, car_char, car_speed_multiplier);
 	
+
+	level_no = LevelSelection(&roads, &obstacles, &numof_roads, &numof_obstacles, playwin, road_color, car_length, car_char, car_speed_multiplier);
+	
+	point_t* points = InitPoints(level_no);
+	object_t* stork = InitStork(playwin, road_color, level_no);
+
 	ShowNewStatus(playwin, timer, frog, 0);
 	Show(frog, 0, 0, roads[0]->colour);
 
