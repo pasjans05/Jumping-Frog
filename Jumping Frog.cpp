@@ -338,8 +338,6 @@ void EndScreen(WINDOW* w, int pts, leaderboard_t** leaderboard, int numof_leader
 	}
 	else
 		mvwaddstr(w, 1, 1, "You lost.");
-	// TODO: endscreen time
-	// mvwaddstr(w, 3, 1, "Your time: "); 
 
 	wgetch(w); // wait here
 
@@ -401,7 +399,6 @@ window_t* Init(WINDOW* parent, int y, int x, int colour, int delay)
 	window_t* W = (window_t*)malloc(sizeof(window_t));
 	W->x = x; W->y = y; W->lines = LINES; W->cols = COLS; W->colour = colour;
 	W->window = subwin(parent, LINES, COLS, y, x);
-	// CleanWin(W);
 	if (delay == DELAY_OFF) // non-blocking reading of characters (for real-time game)
 		nodelay(W->window, TRUE);
 	wrefresh(W->window);
@@ -711,7 +708,7 @@ road_t* InitRoad(window_t* w, int posY, int lanes, int col, int car_lngth, char 
 	road->win = w;
 	road->y = posY;
 	road->width = LanesToX(lanes);
-	road->speed = CarSpeed(car_speed); // TODO: (optional) make speed an array so that each lane has a separate speed
+	road->speed = CarSpeed(car_speed);
 	road->stopped = (int*)malloc(lanes * sizeof(int));
 	for (int i = 0; i < lanes; i++) road->stopped[i] = 0;
 	
@@ -943,7 +940,7 @@ void Sleep(unsigned int tui)
 {
 	clock_t start_time = clock();
 	clock_t end_time = start_time + (clock_t)(tui * CLOCKS_PER_SEC / 1000);
-	while (clock() < end_time) { /* while that doesn't end until specified time */ }
+	while (clock() < end_time) { /* while loop that doesn't end until specified time */ }
 }
 
 timer_t* InitTimer()
@@ -1099,6 +1096,7 @@ void LevelSelectionText(WINDOW* w)
 	mvwaddstr(w, 16, 1, "Navigate around narrow streets with walls on the sides just as in Monaco GP to find the way to score the most points.");
 }
 
+// ask player to select level and initialise it
 int LevelSelection(road_t*** roads, object_t*** obstacles, int* numof_roads, int* numof_obstacles, window_t* w, int col, int car_length, char car_char, int car_speed)
 {
 	int level;
@@ -1237,6 +1235,7 @@ void ReadConfig(char* frog_appeal, int* car_length, char* car_char, int* car_spe
 	config_file = fopen("config.txt", "r");
 
 	// default values in case file read fails
+	*frog_appeal = 'Q';
 	*car_char = '#';
 	*car_length = 3;
 	*car_speed = 3;
